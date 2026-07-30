@@ -47,6 +47,41 @@ if ($forbiddenPresent.Count -gt 0) {
     throw "Forbidden sample paths exist: $($forbiddenPresent -join ', ')"
 }
 
+$engineConfigPath = Join-Path $sampleRoot 'Config/DefaultEngine.ini'
+$engineConfigText = Get-Content -LiteralPath $engineConfigPath -Raw
+$forbiddenEngineConfigPatterns = @(
+    [pscustomobject]@{
+        Name = 'Android File Server settings section'
+        Pattern = '(?m)^\s*\[/Script/AndroidFileServerEditor\.AndroidFileServerRuntimeSettings\]\s*$'
+    },
+    [pscustomobject]@{
+        Name = 'Android File Server security token'
+        Pattern = '(?m)^\s*SecurityToken\s*='
+    },
+    [pscustomobject]@{
+        Name = 'Android File Server network access'
+        Pattern = '(?m)^\s*bAllowNetworkConnection\s*=\s*True\s*$'
+    }
+)
+foreach ($check in $forbiddenEngineConfigPatterns) {
+    if ($engineConfigText -match $check.Pattern) {
+        throw "Forbidden $($check.Name) remains in Config/DefaultEngine.ini. Remove the Android File Server setting instead of blanking its token."
+    }
+}
+
+$verifyScriptPath = (Resolve-Path -LiteralPath $PSCommandPath).Path
+$textExtensions = @('.ini', '.json', '.md', '.ps1', '.py', '.txt', '.uplugin', '.uproject', '.cs', '.cpp', '.h', '.hpp')
+$textFiles = @(Get-ChildItem -LiteralPath $sampleRoot -Recurse -File | Where-Object {
+    $_.FullName -notmatch '\\(\.git|Binaries|Intermediate|Saved|DerivedDataCache|\.verification)\\' -and
+    $_.FullName -ne $verifyScriptPath -and
+    $_.Extension -in $textExtensions
+})
+$securityTokenMatches = @($textFiles | Select-String -Pattern 'SecurityToken\s*=')
+if ($securityTokenMatches.Count -gt 0) {
+    $locations = @($securityTokenMatches | ForEach-Object { "$($_.Path):$($_.LineNumber)" }) -join ', '
+    throw "Forbidden SecurityToken= configuration remains in Sample files: $locations"
+}
+
 $paidPluginTracked = @()
 if (Test-Path -LiteralPath (Join-Path $sampleRoot '.git')) {
     $paidPluginTracked = @(git -C $sampleRoot ls-files -- 'Plugins/EditorActorTagDisplay')
