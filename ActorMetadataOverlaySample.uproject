@@ -1,0 +1,27 @@
+{
+    "FileVersion": 3,
+    "EngineAssociation": "5.6",
+    "Category": "Samples",
+    "Description": "Free sample project and demo fixtures for Actor Metadata Overlay.",
+    "Modules": [
+        {
+            "Name": "ActorMetadataOverlaySample",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        }
+    ],
+    "Plugins": [
+        {
+            "Name": "ActorMetadataOverlayDemoFixtures",
+            "Enabled": true
+        },
+        {
+            "Name": "EditorActorTagDisplay",
+            "Enabled": true
+        },
+        {
+            "Name": "PythonScriptPlugin",
+            "Enabled": true
+        }
+    ]
+}

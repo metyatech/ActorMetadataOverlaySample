@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "product": "Actor Metadata Overlay",
+  "engineBaseline": "5.6",
+  "map": "/Game/ActorMetadataOverlayDemo/Maps/ActorMetadataOverlayOverview",
+  "actors": [
+    {
+      "id": "loot-crate-a",
+      "actorClass": "AActorMetadataOverlayDemoActor",
+      "actorName": "AMO_LootCrate_A",
+      "actorLabel": "Loot Crate A",
+      "actorTags": ["Inspectable", "Loot"],
+      "gameplayTags": ["Loot.Rare", "World.Interactable"],
+      "folder": "ActorMetadataOverlayDemo/Loot",
+      "dataLayers": ["Gameplay", "Night"],
+      "properties": {"State": "Ready", "Priority": 80, "Radius": 150.0, "Description": "Rare loot demonstration"},
+      "sampleTransform": {"location": [0.0, 0.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "captureRole": "loot-main",
+      "expectedOverlayLines": [
+        "Loot Crate A",
+        "Class: ActorMetadataOverlayDemoActor",
+        "Actor Tags: Inspectable, Loot",
+        "Gameplay: Loot.Rare, World.Interactable",
+        "Folder: ActorMetadataOverlayDemo/Loot",
+        "Layer: Gameplay, Night",
+        "State: Ready",
+        "Priority: 80"
+      ]
+    },
+    {
+      "id": "enemy-spawn-north",
+      "actorClass": "AActorMetadataOverlayDemoActor",
+      "actorName": "AMO_EnemySpawn_North",
+      "actorLabel": "Enemy Spawn North",
+      "actorTags": ["Enemy", "Spawn"],
+      "gameplayTags": ["Spawn.Enemy"],
+      "folder": "ActorMetadataOverlayDemo/Spawns",
+      "dataLayers": ["Gameplay"],
+      "properties": {"State": "Active", "Priority": 60, "Radius": 100.0, "Description": "North enemy spawn"},
+      "sampleTransform": {"location": [600.0, 0.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "captureRole": "spawn-north",
+      "expectedOverlayLines": []
+    },
+    {
+      "id": "quest-marker-gate",
+      "actorClass": "AActorMetadataOverlayDemoActor",
+      "actorName": "AMO_QuestMarker_Gate",
+      "actorLabel": "Quest Marker — Gate",
+      "actorTags": ["Quest", "Marker"],
+      "gameplayTags": ["Quest.Main"],
+      "folder": "ActorMetadataOverlayDemo/Quest",
+      "dataLayers": ["Gameplay"],
+      "properties": {"State": "Available", "Priority": 90, "Radius": 100.0, "Description": "Main quest gate"},
+      "sampleTransform": {"location": [-500.0, 300.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "captureRole": "quest-gate",
+      "expectedOverlayLines": []
+    },
+    {
+      "id": "audio-zone-courtyard",
+      "actorClass": "AActorMetadataOverlayDemoZone",
+      "actorName": "AMO_AudioZone_Courtyard",
+      "actorLabel": "Audio Zone — Courtyard",
+      "actorTags": ["Audio", "Zone"],
+      "gameplayTags": ["Zone.Audio"],
+      "folder": "ActorMetadataOverlayDemo/Zones",
+      "dataLayers": ["Night"],
+      "properties": {"State": "Enabled", "Priority": 40, "Radius": 500.0},
+      "drawBoundingBox": true,
+      "sampleTransform": {"location": [0.0, 800.0, 160.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "captureRole": "audio-zone",
+      "expectedOverlayLines": []
+    },
+    {
+      "id": "navigation-point-east",
+      "actorClass": "AActorMetadataOverlayDemoActor",
+      "actorName": "AMO_NavPoint_East",
+      "actorLabel": "Navigation Point — East",
+      "actorTags": ["Navigation"],
+      "gameplayTags": [],
+      "folder": "ActorMetadataOverlayDemo/Navigation",
+      "dataLayers": [],
+      "properties": {"State": "Ready", "Priority": 20, "Radius": 50.0, "Description": "Navigation reference"},
+      "sampleTransform": {"location": [500.0, -600.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "captureRole": "navigation-east",
+      "expectedOverlayLines": []
+    },
+    {
+      "id": "far-actor",
+      "actorClass": "AActorMetadataOverlayDemoActor",
+      "actorName": "AMO_FarActor",
+      "actorLabel": "Far Distance Actor",
+      "actorTags": ["DistanceTest"],
+      "gameplayTags": ["Demo.Ready"],
+      "folder": "ActorMetadataOverlayDemo/Distance",
+      "dataLayers": ["Gameplay"],
+      "properties": {"State": "Far", "Priority": 10, "Radius": 25.0, "Description": "Placed beyond the default distance"},
+      "sampleTransform": {"location": [20000.0, 0.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "captureRole": "far-a",
+      "expectedOverlayLines": []
+    },
+    {
+      "id": "filtered-actor",
+      "actorClass": "AActorMetadataOverlayDemoActor",
+      "actorName": "AMO_FilteredActor",
+      "actorLabel": "Filtered Debug Actor",
+      "actorTags": ["OverlayHidden"],
+      "gameplayTags": ["Demo.Hidden"],
+      "folder": "ActorMetadataOverlayDemo/Filtered",
+      "dataLayers": ["Gameplay"],
+      "properties": {"State": "Hidden", "Priority": 1, "Radius": 10.0, "Description": "Excluded by the point rule"},
+      "sampleTransform": {"location": [-800.0, -400.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "captureRole": "filtered",
+      "expectedOverlayLines": []
+    }
+  ],
+  "rules": [
+    {
+      "name": "Point Actors",
+      "actorClass": "AActorMetadataOverlayDemoActor",
+      "includeDerivedClasses": true,
+      "requiredActorTags": [],
+      "excludedActorTags": ["OverlayHidden"],
+      "displayTemplate": "{ActorLabel}\nClass: {ActorClass}\nActor Tags: {ActorTags}\nGameplay: {GameplayTags}\nFolder: {Folder}\nLayer: {DataLayers}\nState: {Property:State}\nPriority: {Property:Priority}",
+      "displayColor": "bright-cyan",
+      "worldOffset": [0.0, 0.0, 80.0],
+      "maxDrawDistance": 10000.0,
+      "selectedOnly": false,
+      "drawBoundingBox": false
+    },
+    {
+      "name": "Zone Actors",
+      "actorClass": "AActorMetadataOverlayDemoZone",
+      "includeDerivedClasses": true,
+      "requiredActorTags": [],
+      "excludedActorTags": ["OverlayHidden"],
+      "displayTemplate": "{ActorLabel}\nActor Tags: {ActorTags}\nGameplay: {GameplayTags}\nState: {Property:State}\nRadius: {Property:Radius}",
+      "displayColor": "bright-green",
+      "worldOffset": [0.0, 0.0, 80.0],
+      "maxDrawDistance": 10000.0,
+      "selectedOnly": false,
+      "drawBoundingBox": true
+    }
+  ],
+  "gameplayTags": ["Loot.Rare", "World.Interactable", "Spawn.Enemy", "Quest.Main", "Zone.Audio", "Demo.Ready", "Demo.Hidden"],
+  "dataLayers": ["Gameplay", "Night"],
+  "sampleLayout": {
+    "worldPartition": true,
+    "overviewMap": "/Game/ActorMetadataOverlayDemo/Maps/ActorMetadataOverlayOverview",
+    "description": "A compact verification map with foreground, middle-distance, far-distance, and zone examples."
+  },
+  "captureRoles": {
+    "loot-main": {"description": "Primary point actor"},
+    "spawn-north": {"description": "Enemy spawn point"},
+    "quest-gate": {"description": "Quest marker"},
+    "audio-zone": {"description": "Bounding-box zone"},
+    "navigation-east": {"description": "Navigation reference"},
+    "far-a": {"description": "Distance filtering reference"},
+    "filtered": {"description": "Excluded actor reference"}
+  }
+}

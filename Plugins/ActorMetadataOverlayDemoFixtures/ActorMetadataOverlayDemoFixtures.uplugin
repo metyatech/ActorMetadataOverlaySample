@@ -1,0 +1,31 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "1.0.0",
+    "FriendlyName": "Actor Metadata Overlay Demo Fixtures",
+    "Description": "Free sample actors and Gameplay Tag fixtures for Actor Metadata Overlay.",
+    "Category": "Samples",
+    "CreatedBy": "metyatech",
+    "CreatedByURL": "https://github.com/metyatech",
+    "DocsURL": "https://github.com/metyatech/ActorMetadataOverlaySample",
+    "SupportURL": "https://github.com/metyatech/ActorMetadataOverlaySample/issues",
+    "License": "MIT",
+    "CanContainContent": true,
+    "IsBetaVersion": false,
+    "Installed": false,
+    "SupportedTargetPlatforms": [
+        "Win64"
+    ],
+    "Modules": [
+        {
+            "Name": "ActorMetadataOverlayDemoFixtures",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        },
+        {
+            "Name": "ActorMetadataOverlayDemoFixturesEditor",
+            "Type": "Editor",
+            "LoadingPhase": "PostEngineInit"
+        }
+    ]
+}

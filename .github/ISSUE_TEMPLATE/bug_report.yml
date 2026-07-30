@@ -1,0 +1,16 @@
+name: Bug report
+description: Report a reproducible problem with the public sample.
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Include the engine version and the map or setup step involved.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true

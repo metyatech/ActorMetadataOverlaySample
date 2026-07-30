@@ -1,0 +1,19 @@
+/.vs/
+/Binaries/
+/DerivedDataCache/
+/Intermediate/
+/Saved/
+# Unreal-generated output in project and plugin directories.
+**/Binaries/
+**/Intermediate/
+**/Saved/
+**/DerivedDataCache/
+/Plugins/EditorActorTagDisplay/
+/.verification/
+/artifacts/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.VC.opendb
