@@ -22,8 +22,13 @@ The paid plugin, Fab packages, Deep Water Station assets, third-party assets, an
 For local development, clone this repository beside the plugin repository and run:
 
 ```powershell
-.\Scripts\Setup-Local.ps1 -PluginSource '..\EditorActorTagDisplayPlugin' -EngineVersion 5.6
+.\Scripts\Setup-Local.ps1 `
+  -PluginSource '..\EditorActorTagDisplayPlugin' `
+  -EngineVersion 5.6 `
+  -Build
 ```
+
+The script creates a fresh ignored local plugin copy, aligns only the copied descriptor to the selected engine, removes stale generated binaries when `-Build` is used, and does not modify the source plugin repository. Rerun the command whenever you switch engine versions.
 
 See [SETUP.md](SETUP.md) for local source and Fab customer workflows.
 

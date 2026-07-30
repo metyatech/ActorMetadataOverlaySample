@@ -93,6 +93,57 @@ if ($paidPluginTracked.Count -gt 0) {
     throw 'The paid plugin must remain ignored and untracked: Plugins/EditorActorTagDisplay'
 }
 
+$localPluginRoot = Join-Path $sampleRoot 'Plugins/EditorActorTagDisplay'
+$localPluginPresent = Test-Path -LiteralPath $localPluginRoot
+$expectedPluginEngineVersion = if ($EngineVersion) { "$EngineVersion.0" } else { $null }
+$actualPluginEngineVersion = $null
+$localCopyMarkerValid = $false
+$localPluginTracked = ($paidPluginTracked.Count -gt 0)
+if ($EngineVersion -and $localPluginPresent) {
+    $localDescriptorPath = Join-Path $localPluginRoot 'EditorActorTagDisplay.uplugin'
+    if (-not (Test-Path -LiteralPath $localDescriptorPath)) {
+        throw 'The local Actor Metadata Overlay copy is missing EditorActorTagDisplay.uplugin. Run Setup-Local.ps1 again with -EngineVersion 5.6 -Build.'
+    }
+    $localDescriptor = Get-Content -LiteralPath $localDescriptorPath -Raw | ConvertFrom-Json
+    $actualPluginEngineVersion = $localDescriptor.EngineVersion
+    if ($localDescriptor.FriendlyName -ne 'Actor Metadata Overlay') {
+        throw 'The local Actor Metadata Overlay copy has an unexpected FriendlyName. Run Setup-Local.ps1 again with -EngineVersion 5.6 -Build.'
+    }
+    if ($actualPluginEngineVersion -ne $expectedPluginEngineVersion) {
+        throw "The local Actor Metadata Overlay copy targets Unreal Engine $actualPluginEngineVersion, but this verification run targets Unreal Engine $EngineVersion. Run Setup-Local.ps1 again with -EngineVersion $EngineVersion -Build."
+    }
+
+    $localMarkerPath = Join-Path $localPluginRoot '.amo-sample-local-copy.json'
+    if (-not (Test-Path -LiteralPath $localMarkerPath)) {
+        throw 'The local Actor Metadata Overlay copy is missing .amo-sample-local-copy.json. Run Setup-Local.ps1 again with -EngineVersion 5.6 -Build.'
+    }
+    $localMarker = Get-Content -LiteralPath $localMarkerPath -Raw | ConvertFrom-Json
+    if ($localMarker.engineVersion -ne $EngineVersion) {
+        throw "The local copy marker targets Unreal Engine $($localMarker.engineVersion), but this verification run targets Unreal Engine $EngineVersion. Run Setup-Local.ps1 again with -EngineVersion $EngineVersion -Build."
+    }
+    if ($localMarker.descriptorEngineVersion -ne $actualPluginEngineVersion) {
+        throw 'The local copy marker does not match the copied descriptor EngineVersion. Run Setup-Local.ps1 again with -EngineVersion 5.6 -Build.'
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$localMarker.sourceDescriptorSha256)) {
+        throw 'The local copy marker has an empty sourceDescriptorSha256. Run Setup-Local.ps1 again with -EngineVersion 5.6 -Build.'
+    }
+
+    $forbiddenLocalDirectories = @()
+    if (Test-Path -LiteralPath (Join-Path $localPluginRoot '.git')) {
+        $forbiddenLocalDirectories += '.git'
+    }
+    $localDirectories = @(Get-ChildItem -LiteralPath $localPluginRoot -Recurse -Directory -Force)
+    foreach ($localDirectory in $localDirectories) {
+        if ($localDirectory.Name -ieq 'Marketing' -or $localDirectory.Name -ieq '.verification' -or $localDirectory.Name -ieq '.git') {
+            $forbiddenLocalDirectories += $localDirectory.Name
+        }
+    }
+    if ($forbiddenLocalDirectories.Count -gt 0) {
+        throw "The local paid plugin copy contains forbidden directories: $($forbiddenLocalDirectories -join ', ')"
+    }
+    $localCopyMarkerValid = $true
+}
+
 $scriptText = Get-Content -LiteralPath (Join-Path $sampleRoot 'Scripts/Build-DemoMap.py') -Raw
 if ($scriptText.Contains('EditorLevelLibrary')) {
     throw 'Build-DemoMap.py uses the deprecated EditorLevelLibrary API.'
@@ -120,6 +171,11 @@ $result = [pscustomobject]@{
     Map = $mapState
     ForbiddenPaths = $forbiddenPresent
     PaidPluginTracked = $false
+    LocalPluginPresent = $localPluginPresent
+    ExpectedPluginEngineVersion = $expectedPluginEngineVersion
+    ActualPluginEngineVersion = $actualPluginEngineVersion
+    LocalCopyMarkerValid = $localCopyMarkerValid
+    LocalPluginTracked = $localPluginTracked
     EditorLevelLibrary = $false
     DisplayModeAssignments = @()
 }
