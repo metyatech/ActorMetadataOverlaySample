@@ -522,33 +522,27 @@ def regenerate_map(spec, level_subsystem, actor_subsystem):
 def wait_for_existing_generated_actors(spec, level_subsystem, actor_subsystem):
     required_names = get_required_generated_actor_names(spec)
     required_name_set = set(required_names)
-    state = {"handle": None, "started": time.monotonic(), "attempts": 0, "completed": False}
+    state = {"handle": None, "started": time.monotonic(), "completed": False}
 
     def on_post_tick(_delta_seconds):
         if state["completed"]:
             return
-        state["attempts"] += 1
         try:
             current_names = {actor.get_name() for actor in actor_subsystem.get_all_level_actors()}
             if not required_name_set.issubset(current_names):
-                if state["attempts"] >= 30 and any(name.startswith("AMO_") for name in current_names):
-                    state["completed"] = True
-                    unregister_wait_callback(state)
-                    unreal.log("Existing demo actor set differs from demo-spec.json; rebuilding polished sample map")
-                    regenerate_map(spec, level_subsystem, actor_subsystem)
-                    return
                 if time.monotonic() - state["started"] > 120.0:
                     missing = sorted(required_name_set - current_names)
                     state["completed"] = True
                     unregister_wait_callback(state)
-                    raise RuntimeError("Timed out waiting for generated actors; missing: {}".format(", ".join(missing)))
+                    raise RuntimeError("Timed out waiting for the complete generated actor set; missing: {}".format(", ".join(missing)))
                 return
 
-            state["completed"] = True
-            unregister_wait_callback(state)
-            unreal.log("Existing demo actors ready: waitTargetCount={} attempts={} requiredNames={}".format(
-                len(required_names), state["attempts"], ",".join(required_names)))
-            regenerate_map(spec, level_subsystem, actor_subsystem)
+            if required_name_set.issubset(current_names):
+                state["completed"] = True
+                unregister_wait_callback(state)
+                unreal.log("Existing demo actors ready: waitTargetCount={} requiredNames={}".format(
+                    len(required_names), ",".join(required_names)))
+                regenerate_map(spec, level_subsystem, actor_subsystem)
         except Exception:
             if not state["completed"]:
                 state["completed"] = True

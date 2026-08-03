@@ -351,14 +351,38 @@ if (-not $scriptText.Contains('required_names = get_required_generated_actor_nam
     $scriptText.Contains('required_names = {entry["actorName"] for entry in spec["actors"]}')) {
     throw 'wait_for_existing_generated_actors must use the shared generated actor wait-set helper without excluding visual environment actors.'
 }
-if (-not $scriptText.Contains('state["attempts"] >= 30') -or -not $scriptText.Contains('actor set differs from demo-spec.json')) {
-    throw 'Build-DemoMap.py must recover from an older generated actor set instead of waiting forever.'
+$waitFunctionMatch = [regex]::Match($scriptText, '(?ms)^def wait_for_existing_generated_actors\(.*?(?=^def\s|\z)')
+if (-not $waitFunctionMatch.Success) {
+    throw 'Build-DemoMap.py does not contain a complete wait_for_existing_generated_actors function.'
 }
-if (-not $scriptText.Contains('missing = sorted(required_name_set - current_names)') -or
-    -not $scriptText.Contains('Timed out waiting') -or
-    -not $scriptText.Contains('unregister_wait_callback(state)') -or
-    -not $scriptText.Contains('state["completed"]')) {
-    throw 'Build-DemoMap.py must report missing names, always unregister its callback, and guard against duplicate regeneration.'
+$waitFunctionText = $waitFunctionMatch.Value
+if (-not $waitFunctionText.Contains('required_names = get_required_generated_actor_names(spec)') -or
+    -not $waitFunctionText.Contains('required_name_set = set(required_names)') -or
+    -not $waitFunctionText.Contains('required_name_set.issubset(current_names)')) {
+    throw 'wait_for_existing_generated_actors must use the shared complete generated actor set.'
+}
+if (-not $waitFunctionText.Contains('missing = sorted(required_name_set - current_names)') -or
+    -not $waitFunctionText.Contains('Timed out waiting for the complete generated actor set') -or
+    -not $waitFunctionText.Contains('unregister_wait_callback(state)') -or
+    -not $waitFunctionText.Contains('state["completed"]')) {
+    throw 'Build-DemoMap.py must report sorted missing names, always unregister its callback, and guard against duplicate regeneration.'
+}
+if ($waitFunctionText.Contains('state["attempts"] >= 30') -or
+    $waitFunctionText.Contains('actor set differs from demo-spec.json') -or
+    $waitFunctionText.Contains('any(name.startswith("AMO_")') -or
+    $waitFunctionText.Contains('fallback')) {
+    throw 'wait_for_existing_generated_actors contains a partial actor-set or tick-count fallback.'
+}
+if (-not [regex]::IsMatch($waitFunctionText, '(?s)if\s+required_name_set\.issubset\(current_names\):.*?regenerate_map\(spec, level_subsystem, actor_subsystem\)')) {
+    throw 'regenerate_map must be reachable only from the complete generated actor-set branch.'
+}
+$incompleteBranchMatch = [regex]::Match($waitFunctionText, '(?ms)^[ \t]+if not required_name_set\.issubset\(current_names\):.*?(?=^[ \t]+if required_name_set\.issubset\(current_names\):|^[ \t]+except Exception:)')
+if ($incompleteBranchMatch.Success -and $incompleteBranchMatch.Value.Contains('regenerate_map(spec, level_subsystem, actor_subsystem)')) {
+    throw 'regenerate_map must not be reachable from the incomplete generated actor-set branch.'
+}
+if ([regex]::IsMatch($waitFunctionText, '(?s)if\s+state\["attempts"\].*?regenerate_map\(') -or
+    [regex]::IsMatch($waitFunctionText, '(?s)if\s+.*?startswith\("AMO_"\).*?regenerate_map\(')) {
+    throw 'regenerate_map must not be gated by a tick-count or AMO_ prefix condition.'
 }
 if ($scriptText.Contains('fallback') -and $scriptText.Contains('visualMesh')) {
     throw 'Build-DemoMap.py must stop on an invalid visual mesh instead of silently falling back.'
@@ -494,6 +518,10 @@ $result = [pscustomobject]@{
     GeneratedActorWaitCount = $generatedActorWaitSet.Count
     GeneratedActorWaitUnique = ($generatedActorWaitUnique.Count -eq $generatedActorWaitSet.Count)
     EnvironmentActorsIncludedInWait = (@($environmentNames | Where-Object { $_ -in $generatedActorWaitSet }).Count -eq 4)
+    StrictGeneratedActorWait = $true
+    PartialActorSetFallback = $false
+    RegenerateOnlyAfterCompleteSet = $true
+    TimeoutIncludesSortedMissingNames = $true
 }
 if (-not $OutputPath) {
     $OutputPath = Join-Path $sampleRoot '.verification\user-review\sample-static-verification.json'
