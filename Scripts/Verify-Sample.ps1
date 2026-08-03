@@ -51,6 +51,25 @@ $environmentNames = @($environmentEntries | ForEach-Object { $_.actorName })
 if (($environmentNames | Select-Object -Unique).Count -ne 4 -or $environmentNames -contains $null -or $environmentNames -contains '') {
     throw 'visualEnvironment actor names must be present and unique.'
 }
+$fixtureNames = @($spec.actors | ForEach-Object { $_.actorName })
+$regionNames = @($spec.editorRegion.actorName)
+$generatedActorWaitSet = @($fixtureNames) + @($regionNames) + @($environmentNames)
+$generatedActorWaitUnique = @($generatedActorWaitSet | Select-Object -Unique)
+if ($fixtureNames.Count -ne 7 -or $regionNames.Count -ne 1 -or $environmentNames.Count -ne 4) {
+    throw "Expected generated actor groups of 7 fixtures, 1 region, and 4 environment actors; found $($fixtureNames.Count), $($regionNames.Count), and $($environmentNames.Count)."
+}
+if ($generatedActorWaitSet.Count -ne 12 -or $generatedActorWaitUnique.Count -ne 12) {
+    throw "Expected generated actor wait set of 12 unique names; found $($generatedActorWaitSet.Count) names and $($generatedActorWaitUnique.Count) unique names."
+}
+if (@($generatedActorWaitSet | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0) {
+    throw 'Generated actor wait set contains an empty actor name.'
+}
+if (@($environmentNames | Where-Object { $_ -notlike 'AMO_Environment_*' }).Count -gt 0) {
+    throw 'Every visual environment actor name must use the AMO_Environment_ prefix.'
+}
+if ($regionNames[0] -ne 'AMO_DemoRegion') {
+    throw 'The generated actor wait set must use AMO_DemoRegion as its region name.'
+}
 if ($visualEnvironment.floor.actorClass -ne 'AStaticMeshActor' -or $visualEnvironment.floor.mesh -ne '/Engine/BasicShapes/Cube.Cube') {
     throw 'visualEnvironment floor must use AStaticMeshActor and Engine Cube.'
 }
@@ -248,6 +267,23 @@ if ($captureScriptText.Contains('visualEnvironment') -or $captureScriptText.Cont
 if (-not $scriptText.Contains('ensure_visual_environment') -or -not $scriptText.Contains('AMO_Environment_') -or -not $scriptText.Contains('assign_basic_shape_mesh')) {
     throw 'Build-DemoMap.py does not contain the required environment regeneration and Basic Shape assignment paths.'
 }
+if (-not $scriptText.Contains('def get_required_generated_actor_names') -or
+    -not $scriptText.Contains('actor_entries = spec.get("actors")') -or
+    -not $scriptText.Contains('region_spec.get("actorName")') -or
+    -not $scriptText.Contains('visual_environment[key].get("actorName")') -or
+    -not $scriptText.Contains('VISUAL_ENVIRONMENT_KEYS')) {
+    throw 'Build-DemoMap.py does not build the required generated actor wait set from demo-spec.json.'
+}
+if (-not $scriptText.Contains('required_names = get_required_generated_actor_names(spec)') -or
+    $scriptText.Contains('required_names = {entry["actorName"] for entry in spec["actors"]}')) {
+    throw 'wait_for_existing_generated_actors must use the shared generated actor wait-set helper without excluding visual environment actors.'
+}
+if (-not $scriptText.Contains('missing = sorted(required_name_set - current_names)') -or
+    -not $scriptText.Contains('Timed out waiting') -or
+    -not $scriptText.Contains('unregister_wait_callback(state)') -or
+    -not $scriptText.Contains('state["completed"]')) {
+    throw 'Build-DemoMap.py must report missing names, always unregister its callback, and guard against duplicate regeneration.'
+}
 if ($scriptText.Contains('fallback') -and $scriptText.Contains('visualMesh')) {
     throw 'Build-DemoMap.py must stop on an invalid visual mesh instead of silently falling back.'
 }
@@ -311,9 +347,19 @@ if (-not $visualEnvironmentSectionMatch.Success) {
 if ($visualEnvironmentSectionMatch.Value.Contains('ForEachActorWithLoading') -or $visualEnvironmentSectionMatch.Value.Contains('DemoRegion->Load') -or $visualEnvironmentSectionMatch.Value.Contains('ALocationVolume::Load')) {
     throw 'VisualEnvironment must use normal actor iteration and must not explicitly load the region or fixture actors.'
 }
-$trackedMaterialTextureAssets = @(git -C $sampleRoot ls-files -- 'Content/**' | Where-Object { $_ -match '(?i)(\.umaterial|\.utexture|Material|Texture).*(\.uasset|\.umap)$' })
-if ($LASTEXITCODE -ne 0) {
-    throw 'Unable to inspect tracked Sample Content assets.'
+$trackedMaterialTextureAssets = @()
+if (Test-Path -LiteralPath (Join-Path $sampleRoot '.git')) {
+    $trackedMaterialTextureAssets = @(git -C $sampleRoot ls-files -- 'Content/**' | Where-Object { $_ -match '(?i)(\.umaterial|\.utexture|Material|Texture).*(\.uasset|\.umap)$' })
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to inspect tracked Sample Content assets.'
+    }
+} else {
+    $contentRoot = Join-Path $sampleRoot 'Content'
+    if (Test-Path -LiteralPath $contentRoot) {
+        $trackedMaterialTextureAssets = @(Get-ChildItem -LiteralPath $contentRoot -Recurse -File -Force | Where-Object {
+            $_.Name -match '(?i)(\.umaterial|\.utexture|Material|Texture).*(\.uasset|\.umap)$'
+        } | ForEach-Object { Get-RelativePath $sampleRoot $_.FullName })
+    }
 }
 if ($trackedMaterialTextureAssets.Count -gt 0) {
     throw "Sample must not add Material or Texture assets: $($trackedMaterialTextureAssets -join ', ')"
@@ -371,6 +417,10 @@ $result = [pscustomobject]@{
         CaptureApplyExcludesVisuals = $true
         NewMaterialTextureAssets = 0
     }
+    GeneratedActorWaitSet = $generatedActorWaitSet
+    GeneratedActorWaitCount = $generatedActorWaitSet.Count
+    GeneratedActorWaitUnique = ($generatedActorWaitUnique.Count -eq $generatedActorWaitSet.Count)
+    EnvironmentActorsIncludedInWait = (@($environmentNames | Where-Object { $_ -in $generatedActorWaitSet }).Count -eq 4)
 }
 if (-not $OutputPath) {
     $OutputPath = Join-Path $sampleRoot '.verification\user-review\sample-static-verification.json'

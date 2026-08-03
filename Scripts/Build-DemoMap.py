@@ -20,6 +20,12 @@ UNREAL_PYTHON_CLASS_NAMES = {
     "ASkyLight": "SkyLight",
     "ASkyAtmosphere": "SkyAtmosphere",
 }
+VISUAL_ENVIRONMENT_KEYS = (
+    "floor",
+    "directionalLight",
+    "skyLight",
+    "skyAtmosphere",
+)
 
 
 def project_file(relative_path):
@@ -29,6 +35,58 @@ def project_file(relative_path):
 def read_spec():
     with open(project_file("Demo/demo-spec.json"), "r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def get_required_generated_actor_names(spec):
+    actor_entries = spec.get("actors")
+    if not isinstance(actor_entries, list):
+        raise RuntimeError("demo-spec.json key 'actors' must be a list of seven fixture entries")
+    if len(actor_entries) != 7:
+        raise RuntimeError("demo-spec.json key 'actors' must contain exactly 7 fixture entries (found {})".format(
+            len(actor_entries)))
+
+    names = []
+    for index, entry in enumerate(actor_entries):
+        if not isinstance(entry, dict):
+            raise RuntimeError("demo-spec.json actors[{}] must be an object with actorName".format(index))
+        actor_name = entry.get("actorName")
+        if not isinstance(actor_name, str) or not actor_name.strip():
+            raise RuntimeError("demo-spec.json actors[{}].actorName must be non-empty".format(index))
+        names.append(actor_name)
+
+    region_spec = spec.get("editorRegion")
+    if not isinstance(region_spec, dict):
+        raise RuntimeError("demo-spec.json key 'editorRegion' must be an object with actorName")
+    region_name = region_spec.get("actorName")
+    if not isinstance(region_name, str) or not region_name.strip():
+        raise RuntimeError("demo-spec.json editorRegion.actorName must be non-empty")
+    if region_name != "AMO_DemoRegion":
+        raise RuntimeError("demo-spec.json editorRegion.actorName must be AMO_DemoRegion (found {})".format(
+            region_name))
+    names.append(region_name)
+
+    visual_environment = spec.get("visualEnvironment")
+    if not isinstance(visual_environment, dict):
+        raise RuntimeError("demo-spec.json key 'visualEnvironment' must be an object")
+    for key in VISUAL_ENVIRONMENT_KEYS:
+        if key not in visual_environment or not isinstance(visual_environment[key], dict):
+            raise RuntimeError("demo-spec.json visualEnvironment.{} must be present as an object".format(key))
+        actor_name = visual_environment[key].get("actorName")
+        if not isinstance(actor_name, str) or not actor_name.strip():
+            raise RuntimeError("demo-spec.json visualEnvironment.{}.actorName must be non-empty".format(key))
+        if not actor_name.startswith("AMO_Environment_"):
+            raise RuntimeError("demo-spec.json visualEnvironment.{}.actorName must start with AMO_Environment_ (found {})".format(
+                key, actor_name))
+        names.append(actor_name)
+
+    duplicate_names = sorted({name for name in names if names.count(name) > 1})
+    if duplicate_names:
+        raise RuntimeError("demo-spec.json generated actor names must be unique; duplicates: {}".format(
+            ", ".join(duplicate_names)))
+    if len(names) != 12:
+        raise RuntimeError("demo-spec.json generated actor wait set must contain exactly 12 names (found {})".format(
+            len(names)))
+    return names
 
 
 def set_property(actor, name, value):
@@ -135,6 +193,12 @@ def clear_generated_actors(actor_subsystem):
         # EditorActorSubsystem marks actors for deletion; force the documented
         # UObject collection before recreating the same stable object names.
         unreal.SystemLibrary.collect_garbage()
+
+
+def unregister_wait_callback(state):
+    if state["handle"] is not None:
+        unreal.unregister_slate_post_tick_callback(state["handle"])
+        state["handle"] = None
 
 
 def ensure_editor_region(actor_subsystem, region_spec):
@@ -298,30 +362,42 @@ def regenerate_map(spec, level_subsystem, actor_subsystem):
 
 
 def wait_for_existing_generated_actors(spec, level_subsystem, actor_subsystem):
-    required_names = {entry["actorName"] for entry in spec["actors"]}
-    required_names.add(spec["editorRegion"]["actorName"])
-    state = {"handle": None, "started": time.monotonic(), "attempts": 0}
+    required_names = get_required_generated_actor_names(spec)
+    required_name_set = set(required_names)
+    state = {"handle": None, "started": time.monotonic(), "attempts": 0, "completed": False}
 
     def on_post_tick(_delta_seconds):
-        state["attempts"] += 1
-        current_names = {actor.get_name() for actor in actor_subsystem.get_all_level_actors()}
-        if not required_names.issubset(current_names):
-            if time.monotonic() - state["started"] > 60.0:
-                unreal.unregister_slate_post_tick_callback(state["handle"])
-                missing = sorted(required_names - current_names)
-                raise RuntimeError("Timed out waiting for the existing World Partition demo region actors: {}".format(
-                    ", ".join(missing)))
+        if state["completed"]:
             return
+        state["attempts"] += 1
+        try:
+            current_names = {actor.get_name() for actor in actor_subsystem.get_all_level_actors()}
+            if not required_name_set.issubset(current_names):
+                if time.monotonic() - state["started"] > 60.0:
+                    missing = sorted(required_name_set - current_names)
+                    state["completed"] = True
+                    unregister_wait_callback(state)
+                    raise RuntimeError("Timed out waiting for the existing World Partition demo region actors; missing: {}".format(
+                        ", ".join(missing)))
+                return
 
-        unreal.unregister_slate_post_tick_callback(state["handle"])
-        unreal.log("Existing demo actors ready after {} post-tick checks".format(state["attempts"]))
-        regenerate_map(spec, level_subsystem, actor_subsystem)
+            state["completed"] = True
+            unregister_wait_callback(state)
+            unreal.log("Existing demo actors ready: waitTargetCount={} attempts={} requiredNames={}".format(
+                len(required_names), state["attempts"], ",".join(required_names)))
+            regenerate_map(spec, level_subsystem, actor_subsystem)
+        except Exception:
+            if not state["completed"]:
+                state["completed"] = True
+                unregister_wait_callback(state)
+            raise
 
     state["handle"] = unreal.register_slate_post_tick_callback(on_post_tick)
 
 
 def main():
     spec = read_spec()
+    get_required_generated_actor_names(spec)
     level_subsystem = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     map_exists = unreal.EditorAssetLibrary.does_asset_exist(MAP_PATH)
     if map_exists:
