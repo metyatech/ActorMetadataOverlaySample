@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $sampleRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $required = @(
-    'ActorMetadataOverlaySample.uproject',
+    'ActorMetadataSample.uproject',
     'Config/DefaultEditor.ini',
     'Config/DefaultEditorPerProjectUserSettings.ini',
     'Config/DefaultEngine.ini',
@@ -35,6 +35,66 @@ if ($spec.schemaVersion -ne 1 -or $spec.actors.Count -ne 7 -or $spec.rules.Count
 if ($spec.map -ne '/Game/ActorMetadataOverlayDemo/Maps/ActorMetadataOverlayOverview') {
     throw 'demo-spec.json map path is incorrect.'
 }
+if (-not $spec.editorRegion -or $spec.editorRegion.actorClass -ne 'ALocationVolume' -or $spec.editorRegion.actorName -ne 'AMO_DemoRegion' -or $spec.editorRegion.actorLabel -ne 'Actor Metadata Overlay Demo Region' -or $spec.editorRegion.loadsActorIds.Count -ne 7) {
+    throw 'demo-spec.json editorRegion is missing or does not cover all seven fixture actors.'
+}
+
+$projectPath = Join-Path $sampleRoot 'ActorMetadataSample.uproject'
+$project = Get-Content -LiteralPath $projectPath -Raw | ConvertFrom-Json
+$projectModule = @($project.Modules | Where-Object { $_.Name -eq 'ActorMetadataSample' })
+if ($projectModule.Count -ne 1) {
+    throw 'ActorMetadataSample.uproject does not declare exactly one ActorMetadataSample module.'
+}
+$androidFileServerPlugin = @($project.Plugins | Where-Object { $_.Name -eq 'AndroidFileServer' })
+if ($androidFileServerPlugin.Count -ne 1 -or $androidFileServerPlugin[0].Enabled -ne $false) {
+    throw 'ActorMetadataSample.uproject must explicitly disable the engine AndroidFileServer plugin.'
+}
+
+function Get-RelativePath([string]$BasePath, [string]$ChildPath) {
+    $baseUri = [System.Uri](([System.IO.Path]::GetFullPath($BasePath).TrimEnd('\')) + '\')
+    $childUri = [System.Uri]([System.IO.Path]::GetFullPath($ChildPath))
+    return [System.Uri]::UnescapeDataString($baseUri.MakeRelativeUri($childUri).ToString()).Replace('/', '\')
+}
+
+$textExtensions = @('.ini', '.json', '.md', '.ps1', '.py', '.txt', '.uplugin', '.uproject', '.cs', '.cpp', '.h', '.hpp')
+$verifyScriptPath = (Resolve-Path -LiteralPath $PSCommandPath).Path
+
+$legacyInternalNamePatterns = @(
+    'ActorMetadataOverlaySample\.uproject',
+    'ActorMetadataOverlaySampleEditor\b',
+    'ActorMetadataOverlaySampleTarget\b',
+    'ActorMetadataOverlaySampleEditorTarget\b',
+    'FActorMetadataOverlaySample\w*',
+    'ExtraModuleNames\.Add\(["'']ActorMetadataOverlaySample["'']\)',
+    'IMPLEMENT_PRIMARY_GAME_MODULE\([^\r\n]*ActorMetadataOverlaySample'
+)
+$legacyInternalNameAllowlist = @('Scripts/Setup-Local.ps1')
+$legacyMatches = @()
+foreach ($pattern in $legacyInternalNamePatterns) {
+    $matches = @(Get-ChildItem -LiteralPath $sampleRoot -Recurse -File | Where-Object {
+        $_.FullName -notmatch '\\(\.git|Binaries|Intermediate|Saved|DerivedDataCache|\.verification)\\' -and
+        $_.FullName -ne $verifyScriptPath -and
+        $_.Extension -in $textExtensions -and
+        ((Get-RelativePath $sampleRoot $_.FullName) -replace '\\', '/') -notin $legacyInternalNameAllowlist
+    } | Select-String -Pattern $pattern)
+    $legacyMatches += $matches
+}
+if ($legacyMatches.Count -gt 0) {
+    $locations = @($legacyMatches | ForEach-Object { "$($_.Path):$($_.LineNumber):$($_.Line.Trim())" }) -join "`n"
+    throw "Old internal project name remains outside its explicit generated-metadata allowlist:`n$locations"
+}
+$oldNameScanPath = Join-Path $sampleRoot '.verification\user-review\old-name-scan.json'
+$oldNameScan = [ordered]@{
+    status = 'PASS'
+    internalProjectName = 'ActorMetadataSample'
+    internalProjectNameLength = 'ActorMetadataSample'.Length
+    forbiddenPatterns = $legacyInternalNamePatterns
+    allowlist = $legacyInternalNameAllowlist
+    matches = @()
+    publicRepositoryNameAllowed = $true
+}
+New-Item -ItemType Directory -Path (Split-Path -Parent $oldNameScanPath) -Force | Out-Null
+$oldNameScan | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $oldNameScanPath -Encoding UTF8
 
 $forbidden = @(
     'Content/Python/init_unreal.py',
@@ -69,8 +129,6 @@ foreach ($check in $forbiddenEngineConfigPatterns) {
     }
 }
 
-$verifyScriptPath = (Resolve-Path -LiteralPath $PSCommandPath).Path
-$textExtensions = @('.ini', '.json', '.md', '.ps1', '.py', '.txt', '.uplugin', '.uproject', '.cs', '.cpp', '.h', '.hpp')
 $textFiles = @(Get-ChildItem -LiteralPath $sampleRoot -Recurse -File | Where-Object {
     $_.FullName -notmatch '\\(\.git|Binaries|Intermediate|Saved|DerivedDataCache|\.verification)\\' -and
     $_.FullName -ne $verifyScriptPath -and
@@ -152,6 +210,14 @@ $displayModeAssignments = rg -n --hidden -S 'DisplayMode\s*=' (Join-Path $sample
 if ($LASTEXITCODE -eq 0 -and $displayModeAssignments) {
     throw 'Sample scripts contain a DisplayMode assignment.'
 }
+$regionModulePath = Join-Path $sampleRoot 'Plugins/ActorMetadataOverlayDemoFixtures/Source/ActorMetadataOverlayDemoFixturesEditor/Private/ActorMetadataOverlayDemoFixturesEditor.cpp'
+$regionModuleText = Get-Content -LiteralPath $regionModulePath -Raw
+if (-not $regionModuleText.Contains('FEditorDelegates::OnMapOpened') -or -not $regionModuleText.Contains('ALocationVolume') -or -not $regionModuleText.Contains('AMO_DemoRegion')) {
+    throw 'The Fixture Editor module does not contain the exact one-shot LocationVolume map-open loader.'
+}
+if ($regionModuleText.Contains('FTSTicker') -or $regionModuleText.Contains('DisplayMode') -or $regionModuleText.Contains('Python')) {
+    throw 'The Fixture Editor module contains a forbidden tick, display-mode, or Python startup path.'
+}
 
 $mapPath = Join-Path $sampleRoot 'Content\ActorMetadataOverlayDemo\Maps\ActorMetadataOverlayOverview.umap'
 $mapState = [pscustomobject]@{
@@ -178,6 +244,14 @@ $result = [pscustomobject]@{
     LocalPluginTracked = $localPluginTracked
     EditorLevelLibrary = $false
     DisplayModeAssignments = @()
+    LegacyInternalNameScan = $oldNameScan
+    EditorRegionLoader = [pscustomobject]@{
+        MapOpenedDelegate = $true
+        LocationVolume = $true
+        Tick = $false
+        PythonStartup = $false
+        DisplayModeMutation = $false
+    }
 }
 if (-not $OutputPath) {
     $OutputPath = Join-Path $sampleRoot '.verification\user-review\sample-static-verification.json'

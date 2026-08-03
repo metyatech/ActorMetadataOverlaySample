@@ -1,8 +1,8 @@
 using UnrealBuildTool;
 
-public class ActorMetadataOverlaySample : ModuleRules
+public class ActorMetadataSample : ModuleRules
 {
-    public ActorMetadataOverlaySample(ReadOnlyTargetRules Target) : base(Target)
+    public ActorMetadataSample(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[]

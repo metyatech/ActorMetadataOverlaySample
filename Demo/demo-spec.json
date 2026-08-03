@@ -3,6 +3,24 @@
   "product": "Actor Metadata Overlay",
   "engineBaseline": "5.6",
   "map": "/Game/ActorMetadataOverlayDemo/Maps/ActorMetadataOverlayOverview",
+  "editorRegion": {
+    "actorClass": "ALocationVolume",
+    "actorName": "AMO_DemoRegion",
+    "actorLabel": "Actor Metadata Overlay Demo Region",
+    "bounds": {
+      "min": [-2000.0, -2000.0, -500.0],
+      "max": [22000.0, 2000.0, 1000.0]
+    },
+    "loadsActorIds": [
+      "loot-crate-a",
+      "enemy-spawn-north",
+      "quest-marker-gate",
+      "audio-zone-courtyard",
+      "navigation-point-east",
+      "far-actor",
+      "filtered-actor"
+    ]
+  },
   "actors": [
     {
       "id": "loot-crate-a",

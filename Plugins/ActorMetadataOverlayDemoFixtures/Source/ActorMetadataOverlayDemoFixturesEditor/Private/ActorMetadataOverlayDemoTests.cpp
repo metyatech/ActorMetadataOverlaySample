@@ -10,6 +10,7 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "LocationVolume.h"
 #include "WorldPartition/WorldPartition.h"
 #include "WorldPartition/WorldPartitionHelpers.h"
 
@@ -42,11 +43,11 @@ namespace ActorMetadataOverlayDemoTests
     }
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataOverlaySampleSpecTest,
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataSampleSpecTest,
     "ActorMetadataOverlay.Sample.Spec",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FActorMetadataOverlaySampleSpecTest::RunTest(const FString& Parameters)
+bool FActorMetadataSampleSpecTest::RunTest(const FString& Parameters)
 {
     TSharedPtr<FJsonObject> Spec;
     FString Error;
@@ -64,11 +65,11 @@ bool FActorMetadataOverlaySampleSpecTest::RunTest(const FString& Parameters)
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataOverlaySampleMapTest,
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataSampleMapTest,
     "ActorMetadataOverlay.Sample.Map",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FActorMetadataOverlaySampleMapTest::RunTest(const FString& Parameters)
+bool FActorMetadataSampleMapTest::RunTest(const FString& Parameters)
 {
     UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     TestNotNull(TEXT("editor world is loaded"), World);
@@ -127,11 +128,11 @@ bool FActorMetadataOverlaySampleMapTest::RunTest(const FString& Parameters)
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataOverlaySampleRulesTest,
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataSampleRulesTest,
     "ActorMetadataOverlay.Sample.Rules",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FActorMetadataOverlaySampleRulesTest::RunTest(const FString& Parameters)
+bool FActorMetadataSampleRulesTest::RunTest(const FString& Parameters)
 {
     const FString Config = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Config/DefaultEditor.ini"));
     const int32 PointIndex = Config.Find(TEXT("RuleName=\"Point Actors\""));
@@ -146,11 +147,11 @@ bool FActorMetadataOverlaySampleRulesTest::RunTest(const FString& Parameters)
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataOverlaySampleGameplayTagsTest,
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataSampleGameplayTagsTest,
     "ActorMetadataOverlay.Sample.GameplayTags",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FActorMetadataOverlaySampleGameplayTagsTest::RunTest(const FString& Parameters)
+bool FActorMetadataSampleGameplayTagsTest::RunTest(const FString& Parameters)
 {
     const TArray<FString> RequiredTags = {
         TEXT("Loot.Rare"),
@@ -169,11 +170,11 @@ bool FActorMetadataOverlaySampleGameplayTagsTest::RunTest(const FString& Paramet
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataOverlaySampleSyncSafetyTest,
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataSampleSyncSafetyTest,
     "ActorMetadataOverlay.Sample.SyncSafety",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FActorMetadataOverlaySampleSyncSafetyTest::RunTest(const FString& Parameters)
+bool FActorMetadataSampleSyncSafetyTest::RunTest(const FString& Parameters)
 {
     const FString Script = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Scripts/Sync-DemoToCaptureHost.ps1"));
     TestTrue(TEXT("sync defaults to dry run"), Script.Contains(TEXT("DryRun")) && Script.Contains(TEXT("Apply")));
@@ -184,11 +185,11 @@ bool FActorMetadataOverlaySampleSyncSafetyTest::RunTest(const FString& Parameter
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataOverlaySampleDisplayModeTest,
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataSampleDisplayModeTest,
     "ActorMetadataOverlay.Sample.DisplayMode",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
-bool FActorMetadataOverlaySampleDisplayModeTest::RunTest(const FString& Parameters)
+bool FActorMetadataSampleDisplayModeTest::RunTest(const FString& Parameters)
 {
     const FString UserConfig = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Config/DefaultEditorPerProjectUserSettings.ini"));
     TestTrue(TEXT("initial display mode matches product default"), UserConfig.Contains(TEXT("DisplayMode=Selected")));
@@ -196,5 +197,74 @@ bool FActorMetadataOverlaySampleDisplayModeTest::RunTest(const FString& Paramete
     const FString CaptureScript = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Scripts/Capture/Apply-DemoSpec.py"));
     TestTrue(TEXT("map generation does not set display mode"), !BuildScript.Contains(TEXT("DisplayMode")));
     TestTrue(TEXT("capture application does not set display mode"), !CaptureScript.Contains(TEXT("DisplayMode")));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataSampleInitialRegionTest,
+    "ActorMetadataOverlay.Sample.InitialRegion",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FActorMetadataSampleInitialRegionTest::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    TestNotNull(TEXT("editor world is loaded"), World);
+    if (!World)
+    {
+        return false;
+    }
+
+    TestEqual(TEXT("exact overview map is loaded"), World->GetOutermost()->GetName(), FString(TEXT("/Game/ActorMetadataOverlayDemo/Maps/ActorMetadataOverlayOverview")));
+
+    ALocationVolume* DemoRegion = nullptr;
+    int32 RegionCount = 0;
+    for (TActorIterator<ALocationVolume> It(World); It; ++It)
+    {
+        if (It->GetFName() == FName(TEXT("AMO_DemoRegion")))
+        {
+            DemoRegion = *It;
+            ++RegionCount;
+        }
+    }
+
+    TestEqual(TEXT("exactly one demo region exists"), RegionCount, 1);
+    TestNotNull(TEXT("demo region is present"), DemoRegion);
+    if (!DemoRegion)
+    {
+        return false;
+    }
+
+    TestEqual(TEXT("demo region label"), DemoRegion->GetActorLabel(), FString(TEXT("Actor Metadata Overlay Demo Region")));
+    TestTrue(TEXT("demo region is loaded by the editor startup path"), DemoRegion->IsLoaded());
+
+    const TArray<FString> RequiredLabels = {
+        TEXT("Loot Crate A"),
+        TEXT("Enemy Spawn North"),
+        TEXT("Quest Marker — Gate"),
+        TEXT("Audio Zone — Courtyard"),
+        TEXT("Navigation Point — East"),
+        TEXT("Far Distance Actor"),
+        TEXT("Filtered Debug Actor")
+    };
+    TSet<FString> FoundLabels;
+    int32 FixtureCount = 0;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        AActor* Actor = *It;
+        if (Actor && (Actor->IsA<AActorMetadataOverlayDemoActor>() || Actor->IsA<AActorMetadataOverlayDemoZone>()))
+        {
+            ++FixtureCount;
+            FoundLabels.Add(Actor->GetActorLabel());
+            TestTrue(FString::Printf(TEXT("demo region contains %s"), *Actor->GetActorLabel()), DemoRegion->EncompassesPoint(Actor->GetActorLocation()));
+        }
+    }
+    TestEqual(TEXT("normal actor iteration finds all fixtures"), FixtureCount, 7);
+    for (const FString& Label : RequiredLabels)
+    {
+        TestTrue(FString::Printf(TEXT("initially loaded actor exists: %s"), *Label), FoundLabels.Contains(Label));
+    }
+
+    const FString UserConfig = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Config/DefaultEditorPerProjectUserSettings.ini"));
+    TestTrue(TEXT("initial display mode remains Selected"), UserConfig.Contains(TEXT("DisplayMode=Selected")));
+    TestFalse(TEXT("sample startup Python is absent"), FPaths::FileExists(FPaths::ProjectDir() / TEXT("Content/Python/init_unreal.py")));
     return true;
 }

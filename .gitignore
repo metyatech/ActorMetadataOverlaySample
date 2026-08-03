@@ -1,4 +1,7 @@
 /.vs/
+/.ignore
+/.vscode/
+/ActorMetadataSample.code-workspace
 /Binaries/
 /DerivedDataCache/
 /Intermediate/

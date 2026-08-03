@@ -5,7 +5,7 @@
     "Description": "Free sample project and demo fixtures for Actor Metadata Overlay.",
     "Modules": [
         {
-            "Name": "ActorMetadataOverlaySample",
+            "Name": "ActorMetadataSample",
             "Type": "Runtime",
             "LoadingPhase": "Default"
         }
@@ -22,6 +22,10 @@
         {
             "Name": "PythonScriptPlugin",
             "Enabled": true
+        },
+        {
+            "Name": "AndroidFileServer",
+            "Enabled": false
         }
     ]
 }

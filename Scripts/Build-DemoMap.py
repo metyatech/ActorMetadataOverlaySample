@@ -79,8 +79,32 @@ def get_current_world(level_subsystem):
 
 def clear_generated_actors(actor_subsystem):
     for actor in list(actor_subsystem.get_all_level_actors()):
-        if actor.get_name().startswith("AMO_") or actor.get_actor_label().startswith("Loot Crate"):
+        if (actor.get_name().startswith("AMO_") or actor.get_actor_label().startswith("Loot Crate")):
             actor_subsystem.destroy_actor(actor)
+
+
+def ensure_editor_region(actor_subsystem, region_spec):
+    region_class = getattr(unreal, "LocationVolume", None)
+    if region_class is None:
+        raise RuntimeError("The installed engine does not expose ALocationVolume to Python")
+
+    bounds = region_spec["bounds"]
+    minimum = bounds["min"]
+    maximum = bounds["max"]
+    center = [(minimum[index] + maximum[index]) * 0.5 for index in range(3)]
+    extent = [(maximum[index] - minimum[index]) * 0.5 for index in range(3)]
+    region = actor_subsystem.spawn_actor_from_class(
+        region_class,
+        unreal.Vector(*center),
+        unreal.Rotator(0.0, 0.0, 0.0),
+    )
+    if region is None:
+        raise RuntimeError("Could not spawn demo editor region")
+    region.rename(region_spec["actorName"])
+    region.set_actor_label(region_spec["actorLabel"])
+    # ALocationVolume's default brush is 200 cm wide on each axis.
+    region.set_actor_scale3d(unreal.Vector(*(value / 100.0 for value in extent)))
+    return region
 
 
 def configure_actor(actor, entry, data_layer_instances):
@@ -131,6 +155,8 @@ def main():
         actor.rename(entry["actorName"])
         actor.set_actor_scale3d(unreal.Vector(*transform["scale"]))
         configure_actor(actor, entry, data_layer_instances)
+
+    ensure_editor_region(actor_subsystem, spec["editorRegion"])
 
     if not level_subsystem.save_current_level():
         raise RuntimeError("Could not save overview map")

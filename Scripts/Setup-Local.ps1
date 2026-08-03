@@ -63,6 +63,20 @@ $projectFilesExitCode = $null
 $excludedPathChecks = @()
 $buildCleanupChecks = @()
 $paidPluginTracked = $false
+$projectFilesRequested = [bool]($GenerateProjectFiles -or $Build)
+$generatedProjectFilePaths = @()
+$legacyProjectFileAllowlist = @(
+    'ActorMetadataOverlaySample.sln',
+    'ActorMetadataOverlaySample.code-workspace',
+    'ActorMetadataOverlaySample.vcxproj',
+    'ActorMetadataOverlaySample.vcxproj.filters',
+    'ActorMetadataOverlaySample.vcxproj.user',
+    'ActorMetadataOverlaySampleEditor.vcxproj',
+    'ActorMetadataOverlaySampleEditor.vcxproj.filters',
+    'ActorMetadataOverlaySampleEditor.vcxproj.user',
+    '.vscode/compileCommands_ActorMetadataOverlaySample.json'
+)
+$legacyProjectDirectoryAllowlist = @('.vscode/compileCommands_ActorMetadataOverlaySample')
 $resultStatus = 'Failed'
 $resultError = $null
 
@@ -325,6 +339,60 @@ function Remove-AllowedGeneratedDirectory([string]$Path) {
     }
 }
 
+function Remove-AllowedGeneratedFile([string]$RelativePath) {
+    if ($legacyProjectFileAllowlist -notcontains $RelativePath) {
+        throw "Refusing to remove a non-allowlisted generated project file: $RelativePath"
+    }
+    $fullPath = [System.IO.Path]::GetFullPath((Join-Path $sampleRootFull $RelativePath))
+    if (-not $fullPath.StartsWith($sampleRootFull + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Generated project file escaped the sample root: $fullPath"
+    }
+    $existedBefore = Test-Path -LiteralPath $fullPath
+    if ($existedBefore) {
+        if (Test-ReparsePoint $fullPath) {
+            throw "Generated project file is a reparse point and cannot be removed: $fullPath"
+        }
+        [System.IO.File]::Delete($fullPath)
+    }
+    $existsAfter = Test-Path -LiteralPath $fullPath
+    if ($existsAfter) {
+        throw "Generated project file still exists after removal: $fullPath"
+    }
+    return [pscustomobject]@{
+        path = $fullPath
+        existedBefore = $existedBefore
+        deleted = $existedBefore
+        existsAfter = $existsAfter
+    }
+}
+
+function Remove-AllowedGeneratedProjectDirectory([string]$RelativePath) {
+    if ($legacyProjectDirectoryAllowlist -notcontains $RelativePath) {
+        throw "Refusing to remove a non-allowlisted generated project directory: $RelativePath"
+    }
+    $fullPath = [System.IO.Path]::GetFullPath((Join-Path $sampleRootFull ($RelativePath.Replace('/', '\'))).TrimEnd('\'))
+    if (-not $fullPath.StartsWith($sampleRootFull + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Generated project directory escaped the sample root: $fullPath"
+    }
+    $existedBefore = Test-Path -LiteralPath $fullPath
+    if ($existedBefore) {
+        if (Test-ReparsePoint $fullPath) {
+            throw "Generated project directory is a reparse point and cannot be removed: $fullPath"
+        }
+        [System.IO.Directory]::Delete($fullPath, $true)
+    }
+    $existsAfter = Test-Path -LiteralPath $fullPath
+    if ($existsAfter) {
+        throw "Generated project directory still exists after removal: $fullPath"
+    }
+    return [pscustomobject]@{
+        path = $fullPath
+        existedBefore = $existedBefore
+        deleted = $existedBefore
+        existsAfter = $existsAfter
+    }
+}
+
 function Invoke-HiddenProcess([string]$FilePath, [string[]]$Arguments, [string]$WorkingDirectory, [string]$StdoutPath, [string]$StderrPath) {
     New-Item -ItemType Directory -Path (Split-Path -Parent $StdoutPath) -Force | Out-Null
     $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $StdoutPath -RedirectStandardError $StderrPath
@@ -405,8 +473,9 @@ function Write-ResultManifest([string]$Status, [string]$ErrorMessage) {
         backupManifestPath = if ($null -ne $backupInfo) { $backupInfo.manifestPath } else { $backupManifestPath }
         buildRequested = [bool]$Build
         buildExitCode = $buildExitCode
-        projectFilesRequested = [bool]$GenerateProjectFiles
+        projectFilesRequested = $projectFilesRequested
         projectFilesExitCode = $projectFilesExitCode
+        generatedProjectFilePaths = $generatedProjectFilePaths
         replacedTarget = $replacedTarget
         rollbackOccurred = $rollbackOccurred
         rollbackSucceeded = $rollbackSucceeded
@@ -433,7 +502,7 @@ try {
     if (-not (Test-Path -LiteralPath $engineBuildTool)) {
         throw "Unreal Engine $EngineVersion was not found at $engineRoot"
     }
-    if ($GenerateProjectFiles) {
+    if ($projectFilesRequested) {
         if (-not (Test-Path -LiteralPath $unrealBuildToolDll)) {
             throw "UnrealBuildTool.dll for Unreal Engine $EngineVersion was not found at $unrealBuildToolDll"
         }
@@ -514,8 +583,14 @@ try {
         }
     }
 
-    if ($GenerateProjectFiles) {
-        $projectPath = Join-Path $sampleRootFull 'ActorMetadataOverlaySample.uproject'
+    if ($projectFilesRequested) {
+        foreach ($legacyProjectFile in $legacyProjectFileAllowlist) {
+            $generatedProjectFilePaths += Remove-AllowedGeneratedFile $legacyProjectFile
+        }
+        foreach ($legacyProjectDirectory in $legacyProjectDirectoryAllowlist) {
+            $generatedProjectFilePaths += Remove-AllowedGeneratedProjectDirectory $legacyProjectDirectory
+        }
+        $projectPath = Join-Path $sampleRootFull 'ActorMetadataSample.uproject'
         $projectStdout = Join-Path $logRoot "setup-$EngineVersion-projectfiles.stdout.log"
         $projectStderr = Join-Path $logRoot "setup-$EngineVersion-projectfiles.stderr.log"
         $projectUbtLog = Join-Path $logRoot "setup-$EngineVersion-projectfiles.ubt.log"
@@ -534,14 +609,29 @@ try {
         if ($projectFilesExitCode -ne 0) {
             throw "Project file generation failed with exit code $projectFilesExitCode. See $projectStdout and $projectStderr"
         }
+        $projectFilesRoot = Join-Path $sampleRootFull 'Intermediate\ProjectFiles'
+        $projectFileCandidates = @(
+            (Join-Path $sampleRootFull 'ActorMetadataSample.sln'),
+            (Join-Path $sampleRootFull 'ActorMetadataSample.code-workspace'),
+            (Join-Path $sampleRootFull '.vscode\compileCommands_ActorMetadataSample.json')
+        )
+        $generatedProjectFiles = @($projectFileCandidates | Where-Object { Test-Path -LiteralPath $_ })
+        if ($generatedProjectFiles.Count -eq 0) {
+            throw "Project file generation did not produce an ActorMetadataSample solution or project metadata file under $projectFilesRoot"
+        }
+        $legacyProjectFilesAfterGeneration = @($legacyProjectFileAllowlist | Where-Object { Test-Path -LiteralPath (Join-Path $sampleRootFull $_) })
+        if ($legacyProjectFilesAfterGeneration.Count -gt 0) {
+            throw "Old internal-name project metadata remains after generation: $($legacyProjectFilesAfterGeneration -join ', ')"
+        }
+        $generatedProjectFilePaths += @($generatedProjectFiles | ForEach-Object { [pscustomobject]@{ path = $_; existsAfter = $true } })
     }
 
     if ($Build) {
-        $projectPath = Join-Path $sampleRootFull 'ActorMetadataOverlaySample.uproject'
+        $projectPath = Join-Path $sampleRootFull 'ActorMetadataSample.uproject'
         $buildStdout = Join-Path $logRoot "setup-$EngineVersion-build.stdout.log"
         $buildStderr = Join-Path $logRoot "setup-$EngineVersion-build.stderr.log"
         $buildArguments = @(
-            'ActorMetadataOverlaySampleEditor',
+            'ActorMetadataSampleEditor',
             'Win64',
             'Development',
             ('"{0}"' -f $projectPath),
