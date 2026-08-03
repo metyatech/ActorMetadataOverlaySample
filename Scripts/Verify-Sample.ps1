@@ -213,10 +213,52 @@ if ($LASTEXITCODE -eq 0 -and $displayModeAssignments) {
 $regionModulePath = Join-Path $sampleRoot 'Plugins/ActorMetadataOverlayDemoFixtures/Source/ActorMetadataOverlayDemoFixturesEditor/Private/ActorMetadataOverlayDemoFixturesEditor.cpp'
 $regionModuleText = Get-Content -LiteralPath $regionModulePath -Raw
 if (-not $regionModuleText.Contains('FEditorDelegates::OnMapOpened') -or -not $regionModuleText.Contains('ALocationVolume') -or -not $regionModuleText.Contains('AMO_DemoRegion')) {
-    throw 'The Fixture Editor module does not contain the exact one-shot LocationVolume map-open loader.'
+    throw 'The Fixture Editor module does not contain the exact LocationVolume map-open loader.'
 }
 if ($regionModuleText.Contains('FTSTicker') -or $regionModuleText.Contains('DisplayMode') -or $regionModuleText.Contains('Python')) {
     throw 'The Fixture Editor module contains a forbidden tick, display-mode, or Python startup path.'
+}
+$onMapOpenedAddCount = ([regex]::Matches($regionModuleText, 'FEditorDelegates::OnMapOpened\.AddRaw')).Count
+$onMapOpenedRemoveCount = ([regex]::Matches($regionModuleText, 'FEditorDelegates::OnMapOpened\.Remove')).Count
+if ($onMapOpenedAddCount -ne 1 -or $onMapOpenedRemoveCount -ne 1) {
+    throw 'The Fixture Editor module must register OnMapOpened once and remove it only through its shutdown cleanup path.'
+}
+if (-not [regex]::IsMatch($regionModuleText, '(?s)ShutdownModule\(\).*?RemoveMapOpenedDelegate\(\)')) {
+    throw 'The Fixture Editor module does not remove the OnMapOpened delegate from ShutdownModule.'
+}
+if ([regex]::IsMatch($regionModuleText, '(?s)TryLoadDemoRegion\(\)\s*\)\s*\{\s*RemoveMapOpenedDelegate\(\)')) {
+    throw 'The Fixture Editor module still removes the delegate after a successful startup load.'
+}
+if ([regex]::IsMatch($regionModuleText, '(?s)void\s+HandleMapOpened\s*\([^)]*\)\s*\{\s*if\s*\(\s*TryLoadDemoRegion\(\)\s*&&.*?RemoveMapOpenedDelegate')) {
+    throw 'The Fixture Editor module still removes the delegate from HandleMapOpened.'
+}
+if (-not $regionModuleText.Contains('World->WorldType != EWorldType::Editor') -or -not $regionModuleText.Contains('World->GetOutermost()->GetName() != DemoMapPackage')) {
+    throw 'The Fixture Editor module does not enforce the exact Editor world and Overview Map package checks.'
+}
+if (-not [regex]::IsMatch($regionModuleText, '(?s)if\s*\(DemoRegion->IsLoaded\(\)\).*?DemoRegion->Load\(\).*?DemoRegion->IsLoaded\(\)')) {
+    throw 'The Fixture Editor module does not guard duplicate loads and confirm IsLoaded after Load.'
+}
+if ($regionModuleText.Contains('LogTemp') -or -not $regionModuleText.Contains('DEFINE_LOG_CATEGORY_STATIC(LogActorMetadataOverlayDemoFixturesEditor')) {
+    throw 'The Fixture Editor module must use its own log category and must not use LogTemp.'
+}
+if (-not $regionModuleText.Contains('bRegionWarningIssued') -or -not [regex]::IsMatch($regionModuleText, '(?s)UE_LOG\(LogActorMetadataOverlayDemoFixturesEditor,\s*Warning')) {
+    throw 'The Fixture Editor module must issue a bounded module-specific warning for missing or duplicate regions.'
+}
+
+$testSourcePath = Join-Path $sampleRoot 'Plugins/ActorMetadataOverlayDemoFixtures/Source/ActorMetadataOverlayDemoFixturesEditor/Private/ActorMetadataOverlayDemoTests.cpp'
+$testSourceText = Get-Content -LiteralPath $testSourcePath -Raw
+$automationTestMatches = [regex]::Matches($testSourceText, '(?s)IMPLEMENT_(?:SIMPLE|CUSTOM_COMPLEX|COMPLEX)_AUTOMATION_TEST\s*\([^,]+,\s*"([^"]+)"')
+$automationTestPaths = @($automationTestMatches | ForEach-Object { $_.Groups[1].Value })
+if ($automationTestPaths.Count -ne 8 -or 'ActorMetadataOverlay.Sample.RegionReopen' -notin $automationTestPaths) {
+    throw "Expected exactly eight Sample automation tests including ActorMetadataOverlay.Sample.RegionReopen; found $($automationTestPaths.Count): $($automationTestPaths -join ', ')."
+}
+$regionReopenSectionMatch = [regex]::Match($testSourceText, '(?s)IMPLEMENT_SIMPLE_AUTOMATION_TEST\(FActorMetadataSampleRegionReopenTest.*\z')
+if (-not $regionReopenSectionMatch.Success) {
+    throw 'The RegionReopen automation test source is missing.'
+}
+$regionReopenSection = $regionReopenSectionMatch.Value
+if ($regionReopenSection.Contains('ForEachActorWithLoading') -or $regionReopenSection.Contains('DemoRegion->Load') -or $regionReopenSection.Contains('ALocationVolume::Load')) {
+    throw 'RegionReopen must not explicitly load the region or fixture actors from the test.'
 }
 
 $mapPath = Join-Path $sampleRoot 'Content\ActorMetadataOverlayDemo\Maps\ActorMetadataOverlayOverview.umap'
@@ -248,9 +290,18 @@ $result = [pscustomobject]@{
     EditorRegionLoader = [pscustomobject]@{
         MapOpenedDelegate = $true
         LocationVolume = $true
+        ExactEditorWorldAndMap = $true
+        ShutdownOnlyRemoval = $true
+        DuplicateLoadGuard = $true
+        WarningBoundedPerSession = $true
         Tick = $false
         PythonStartup = $false
         DisplayModeMutation = $false
+    }
+    AutomationTests = [pscustomobject]@{
+        Count = $automationTestPaths.Count
+        Paths = $automationTestPaths
+        RegionReopen = $true
     }
 }
 if (-not $OutputPath) {

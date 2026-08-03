@@ -40,7 +40,7 @@ Open `ActorMetadataSample.uproject`, then open:
 /Game/ActorMetadataOverlayDemo/Maps/ActorMetadataOverlayOverview
 ```
 
-The Unreal project name is `ActorMetadataSample` (19 characters); the public repository name and URLs remain `ActorMetadataOverlaySample`. The overview map contains one editor-only World Partition `ALocationVolume` named `AMO_DemoRegion`. The Fixture Editor module loads that region once when the exact overview map opens, so the seven fixture actors are available through the normal editor actor iterator without a startup Python script.
+The Unreal project name is `ActorMetadataSample` (19 characters); the public repository name and URLs remain `ActorMetadataOverlaySample`. The overview map contains one editor-only World Partition `ALocationVolume` named `AMO_DemoRegion`. The Fixture Editor module loads that region each time the exact overview map opens, including same-session reopenings, so the seven fixture actors are available through the normal editor actor iterator without a startup Python script.
 
 The initial display mode is the product default, `Selected Actors`. The sample contains no startup script that changes it.
 
