@@ -32,8 +32,9 @@
       "folder": "ActorMetadataOverlayDemo/Loot",
       "dataLayers": ["Gameplay", "Night"],
       "properties": {"State": "Ready", "Priority": 80, "Radius": 150.0, "Description": "Rare loot demonstration"},
-      "sampleTransform": {"location": [0.0, 0.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "sampleTransform": {"location": [-1200.0, -650.0, 110.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.8, 1.8, 1.5]},
       "visualMesh": "/Engine/BasicShapes/Cube.Cube",
+      "visualMaterial": "MI_AMO_Loot",
       "captureRole": "loot-main",
       "expectedOverlayLines": [
         "Loot Crate A",
@@ -56,8 +57,9 @@
       "folder": "ActorMetadataOverlayDemo/Spawns",
       "dataLayers": ["Gameplay"],
       "properties": {"State": "Active", "Priority": 60, "Radius": 100.0, "Description": "North enemy spawn"},
-      "sampleTransform": {"location": [600.0, 0.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "sampleTransform": {"location": [0.0, -650.0, 140.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.4, 1.4, 2.2]},
       "visualMesh": "/Engine/BasicShapes/Cylinder.Cylinder",
+      "visualMaterial": "MI_AMO_Spawn",
       "captureRole": "spawn-north",
       "expectedOverlayLines": []
     },
@@ -71,8 +73,9 @@
       "folder": "ActorMetadataOverlayDemo/Quest",
       "dataLayers": ["Gameplay"],
       "properties": {"State": "Available", "Priority": 90, "Radius": 100.0, "Description": "Main quest gate"},
-      "sampleTransform": {"location": [-500.0, 300.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "sampleTransform": {"location": [1200.0, -650.0, 150.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.5, 1.5, 2.5]},
       "visualMesh": "/Engine/BasicShapes/Cone.Cone",
+      "visualMaterial": "MI_AMO_Quest",
       "captureRole": "quest-gate",
       "expectedOverlayLines": []
     },
@@ -87,7 +90,8 @@
       "dataLayers": ["Night"],
       "properties": {"State": "Enabled", "Priority": 40, "Radius": 500.0},
       "drawBoundingBox": true,
-      "sampleTransform": {"location": [0.0, 800.0, 160.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "sampleTransform": {"location": [0.0, 650.0, 160.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "visualMaterial": "MI_AMO_Zone",
       "captureRole": "audio-zone",
       "expectedOverlayLines": []
     },
@@ -101,8 +105,9 @@
       "folder": "ActorMetadataOverlayDemo/Navigation",
       "dataLayers": [],
       "properties": {"State": "Ready", "Priority": 20, "Radius": 50.0, "Description": "Navigation reference"},
-      "sampleTransform": {"location": [500.0, -600.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "sampleTransform": {"location": [-1200.0, 650.0, 120.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.6, 1.6, 1.6]},
       "visualMesh": "/Engine/BasicShapes/Sphere.Sphere",
+      "visualMaterial": "MI_AMO_Navigation",
       "captureRole": "navigation-east",
       "expectedOverlayLines": []
     },
@@ -118,6 +123,7 @@
       "properties": {"State": "Far", "Priority": 10, "Radius": 25.0, "Description": "Placed beyond the default distance"},
       "sampleTransform": {"location": [20000.0, 0.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
       "visualMesh": "/Engine/BasicShapes/Cube.Cube",
+      "visualMaterial": "MI_AMO_Distance",
       "captureRole": "far-a",
       "expectedOverlayLines": []
     },
@@ -131,14 +137,15 @@
       "folder": "ActorMetadataOverlayDemo/Filtered",
       "dataLayers": ["Gameplay"],
       "properties": {"State": "Hidden", "Priority": 1, "Radius": 10.0, "Description": "Excluded by the point rule"},
-      "sampleTransform": {"location": [-800.0, -400.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "sampleTransform": {"location": [1200.0, 650.0, 120.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.6, 1.6, 1.6]},
       "visualMesh": "/Engine/BasicShapes/Sphere.Sphere",
+      "visualMaterial": "MI_AMO_Filtered",
       "captureRole": "filtered",
       "expectedOverlayLines": []
     }
   ],
   "visualEnvironment": {
-    "style": "neutral-outdoor-test-lane",
+    "style": "polished-technical-showcase",
     "folder": "ActorMetadataOverlayDemo/Environment",
     "floor": {
       "actorName": "AMO_Environment_Floor",
@@ -147,7 +154,8 @@
       "mesh": "/Engine/BasicShapes/Cube.Cube",
       "location": [10000.0, 0.0, -50.0],
       "rotation": [0.0, 0.0, 0.0],
-      "scale": [240.0, 40.0, 1.0]
+      "scale": [240.0, 40.0, 1.0],
+      "material": "MI_AMO_Floor"
     },
     "directionalLight": {
       "actorName": "AMO_Environment_Sun",
@@ -155,10 +163,10 @@
       "actorClass": "ADirectionalLight",
       "location": [0.0, 0.0, 1000.0],
       "rotation": [-35.0, -45.0, 0.0],
-      "intensity": 10.0,
+      "intensity": 8.0,
       "atmosphereSunLight": true,
       "castShadows": true,
-      "mobility": "Stationary"
+      "mobility": "Movable"
     },
     "skyLight": {
       "actorName": "AMO_Environment_SkyLight",
@@ -166,7 +174,7 @@
       "actorClass": "ASkyLight",
       "location": [0.0, 0.0, 1000.0],
       "rotation": [0.0, 0.0, 0.0],
-      "intensity": 1.0,
+      "intensity": 1.2,
       "realTimeCapture": true,
       "mobility": "Movable"
     },
@@ -178,6 +186,108 @@
       "rotation": [0.0, 0.0, 0.0],
       "scale": [1.0, 1.0, 1.0]
     }
+  },
+  "materials": {
+    "root": "/Game/ActorMetadataOverlayDemo/Visuals/Materials",
+    "master": {
+      "name": "M_AMO_Surface",
+      "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/M_AMO_Surface",
+      "parameters": {
+        "BaseColor": {"type": "Vector", "default": [0.18, 0.22, 0.28, 1.0]},
+        "Roughness": {"type": "Scalar", "default": 0.72},
+        "Metallic": {"type": "Scalar", "default": 0.0},
+        "EmissiveColor": {"type": "Vector", "default": [0.0, 0.0, 0.0, 1.0]},
+        "EmissiveStrength": {"type": "Scalar", "default": 0.0}
+      }
+    },
+    "instances": [
+      {"name": "MI_AMO_Plaza", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Plaza", "BaseColor": [0.19, 0.23, 0.29, 1.0], "Roughness": 0.78, "Metallic": 0.0, "EmissiveColor": [0.0, 0.0, 0.0, 1.0], "EmissiveStrength": 0.0},
+      {"name": "MI_AMO_Floor", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Floor", "BaseColor": [0.09, 0.12, 0.17, 1.0], "Roughness": 0.82, "Metallic": 0.0, "EmissiveColor": [0.0, 0.0, 0.0, 1.0], "EmissiveStrength": 0.0},
+      {"name": "MI_AMO_Backdrop", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Backdrop", "BaseColor": [0.025, 0.045, 0.075, 1.0], "Roughness": 0.62, "Metallic": 0.0, "EmissiveColor": [0.0, 0.0, 0.0, 1.0], "EmissiveStrength": 0.0},
+      {"name": "MI_AMO_Accent", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Accent", "BaseColor": [0.015, 0.18, 0.24, 1.0], "Roughness": 0.38, "Metallic": 0.0, "EmissiveColor": [0.0, 0.25, 0.34, 1.0], "EmissiveStrength": 0.7},
+      {"name": "MI_AMO_Lane", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Lane", "BaseColor": [0.07, 0.11, 0.16, 1.0], "Roughness": 0.88, "Metallic": 0.0, "EmissiveColor": [0.0, 0.0, 0.0, 1.0], "EmissiveStrength": 0.0},
+      {"name": "MI_AMO_LaneMarker", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_LaneMarker", "BaseColor": [0.17, 0.30, 0.35, 1.0], "Roughness": 0.42, "Metallic": 0.0, "EmissiveColor": [0.0, 0.18, 0.22, 1.0], "EmissiveStrength": 0.45},
+      {"name": "MI_AMO_Loot", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Loot", "BaseColor": [0.035, 0.12, 0.34, 1.0], "Roughness": 0.58, "Metallic": 0.0, "EmissiveColor": [0.0, 0.02, 0.08, 1.0], "EmissiveStrength": 0.1},
+      {"name": "MI_AMO_Spawn", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Spawn", "BaseColor": [0.60, 0.14, 0.045, 1.0], "Roughness": 0.62, "Metallic": 0.0, "EmissiveColor": [0.06, 0.01, 0.0, 1.0], "EmissiveStrength": 0.08},
+      {"name": "MI_AMO_Quest", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Quest", "BaseColor": [0.62, 0.34, 0.045, 1.0], "Roughness": 0.54, "Metallic": 0.0, "EmissiveColor": [0.08, 0.035, 0.0, 1.0], "EmissiveStrength": 0.12},
+      {"name": "MI_AMO_Navigation", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Navigation", "BaseColor": [0.0, 0.38, 0.38, 1.0], "Roughness": 0.50, "Metallic": 0.0, "EmissiveColor": [0.0, 0.08, 0.08, 1.0], "EmissiveStrength": 0.1},
+      {"name": "MI_AMO_Zone", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Zone", "BaseColor": [0.46, 0.07, 0.37, 1.0], "Roughness": 0.56, "Metallic": 0.0, "EmissiveColor": [0.04, 0.0, 0.03, 1.0], "EmissiveStrength": 0.08},
+      {"name": "MI_AMO_Distance", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Distance", "BaseColor": [0.30, 0.08, 0.48, 1.0], "Roughness": 0.60, "Metallic": 0.0, "EmissiveColor": [0.03, 0.0, 0.07, 1.0], "EmissiveStrength": 0.1},
+      {"name": "MI_AMO_Filtered", "path": "/Game/ActorMetadataOverlayDemo/Visuals/Materials/MI_AMO_Filtered", "BaseColor": [0.10, 0.11, 0.13, 1.0], "Roughness": 0.86, "Metallic": 0.0, "EmissiveColor": [0.0, 0.0, 0.0, 1.0], "EmissiveStrength": 0.0}
+    ],
+    "fixtureAssignments": {
+      "AMO_LootCrate_A": "MI_AMO_Loot",
+      "AMO_EnemySpawn_North": "MI_AMO_Spawn",
+      "AMO_QuestMarker_Gate": "MI_AMO_Quest",
+      "AMO_NavPoint_East": "MI_AMO_Navigation",
+      "AMO_AudioZone_Courtyard": "MI_AMO_Zone",
+      "AMO_FarActor": "MI_AMO_Distance",
+      "AMO_FilteredActor": "MI_AMO_Filtered"
+    }
+  },
+  "presentation": {
+    "style": "polished-technical-showcase",
+    "folder": "ActorMetadataOverlayDemo/Environment",
+    "plaza": {
+      "floor": {"actorName": "AMO_Environment_Plaza_Floor", "actorLabel": "Showcase Plaza Floor", "actorClass": "AStaticMeshActor", "location": [0.0, 0.0, 10.0], "rotation": [0.0, 0.0, 0.0], "scale": [36.0, 27.0, 0.12], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Plaza"},
+      "borders": [
+        {"actorName": "AMO_Environment_Plaza_Border_North", "actorLabel": "Plaza Border North", "actorClass": "AStaticMeshActor", "location": [0.0, 1350.0, 45.0], "rotation": [0.0, 0.0, 0.0], "scale": [36.0, 0.8, 0.45], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Backdrop"},
+        {"actorName": "AMO_Environment_Plaza_Border_South", "actorLabel": "Plaza Border South", "actorClass": "AStaticMeshActor", "location": [0.0, -1350.0, 45.0], "rotation": [0.0, 0.0, 0.0], "scale": [36.0, 0.8, 0.45], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Backdrop"},
+        {"actorName": "AMO_Environment_Plaza_Border_East", "actorLabel": "Plaza Border East", "actorClass": "AStaticMeshActor", "location": [1800.0, 0.0, 45.0], "rotation": [0.0, 0.0, 0.0], "scale": [0.8, 27.0, 0.45], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Backdrop"},
+        {"actorName": "AMO_Environment_Plaza_Border_West", "actorLabel": "Plaza Border West", "actorClass": "AStaticMeshActor", "location": [-1800.0, 0.0, 45.0], "rotation": [0.0, 0.0, 0.0], "scale": [0.8, 27.0, 0.45], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Backdrop"}
+      ],
+      "accentLines": [
+        {"actorName": "AMO_Environment_Plaza_Accent_North", "actorLabel": "Plaza Accent North", "actorClass": "AStaticMeshActor", "location": [0.0, 1190.0, 35.0], "rotation": [0.0, 0.0, 0.0], "scale": [30.0, 0.14, 0.08], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Accent"},
+        {"actorName": "AMO_Environment_Plaza_Accent_South", "actorLabel": "Plaza Accent South", "actorClass": "AStaticMeshActor", "location": [0.0, -1190.0, 35.0], "rotation": [0.0, 0.0, 0.0], "scale": [30.0, 0.14, 0.08], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Accent"}
+      ],
+      "backdrop": {"actorName": "AMO_Environment_TitleBoard", "actorLabel": "Overview Title Board", "actorClass": "AStaticMeshActor", "location": [0.0, 1240.0, 430.0], "rotation": [0.0, 0.0, 0.0], "scale": [15.0, 0.35, 4.0], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Backdrop"}
+    }
+  },
+  "stations": [
+    {"actorName": "AMO_Environment_Station_Loot", "actorLabel": "Station Loot", "actorClass": "AStaticMeshActor", "location": [-1200.0, -650.0, 25.0], "rotation": [0.0, 0.0, 0.0], "scale": [5.0, 5.0, 0.25], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Loot"},
+    {"actorName": "AMO_Environment_Station_Spawn", "actorLabel": "Station Spawn", "actorClass": "AStaticMeshActor", "location": [0.0, -650.0, 25.0], "rotation": [0.0, 0.0, 0.0], "scale": [5.0, 5.0, 0.25], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Spawn"},
+    {"actorName": "AMO_Environment_Station_Quest", "actorLabel": "Station Quest", "actorClass": "AStaticMeshActor", "location": [1200.0, -650.0, 25.0], "rotation": [0.0, 0.0, 0.0], "scale": [5.0, 5.0, 0.25], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Quest"},
+    {"actorName": "AMO_Environment_Station_Navigation", "actorLabel": "Station Navigation", "actorClass": "AStaticMeshActor", "location": [-1200.0, 650.0, 25.0], "rotation": [0.0, 0.0, 0.0], "scale": [5.0, 5.0, 0.25], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Navigation"},
+    {"actorName": "AMO_Environment_Station_Zone", "actorLabel": "Station Zone", "actorClass": "AStaticMeshActor", "location": [0.0, 650.0, 25.0], "rotation": [0.0, 0.0, 0.0], "scale": [5.0, 5.0, 0.25], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Zone"},
+    {"actorName": "AMO_Environment_Station_Filtered", "actorLabel": "Station Filtered", "actorClass": "AStaticMeshActor", "location": [1200.0, 650.0, 25.0], "rotation": [0.0, 0.0, 0.0], "scale": [5.0, 5.0, 0.25], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Filtered"},
+    {"actorName": "AMO_Environment_Station_Distance", "actorLabel": "Station Distance", "actorClass": "AStaticMeshActor", "location": [20000.0, 0.0, 20.0], "rotation": [0.0, 0.0, 0.0], "scale": [3.0, 3.0, 0.20], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Distance"}
+  ],
+  "distanceLane": {
+    "floor": {"actorName": "AMO_Environment_DistanceLane_Floor", "actorLabel": "Distance Test Lane", "actorClass": "AStaticMeshActor", "location": [11000.0, 0.0, 8.0], "rotation": [0.0, 0.0, 0.0], "scale": [180.0, 8.0, 0.12], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Lane"},
+    "borders": [
+      {"actorName": "AMO_Environment_DistanceLane_Border_North", "actorLabel": "Distance Lane North Border", "actorClass": "AStaticMeshActor", "location": [11000.0, 500.0, 45.0], "rotation": [0.0, 0.0, 0.0], "scale": [180.0, 0.35, 0.35], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Backdrop"},
+      {"actorName": "AMO_Environment_DistanceLane_Border_South", "actorLabel": "Distance Lane South Border", "actorClass": "AStaticMeshActor", "location": [11000.0, -500.0, 45.0], "rotation": [0.0, 0.0, 0.0], "scale": [180.0, 0.35, 0.35], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Backdrop"}
+    ],
+    "boundary": {"actorName": "AMO_Environment_DistanceLane_DefaultBoundary", "actorLabel": "Default Draw Distance Boundary", "actorClass": "AStaticMeshActor", "location": [10000.0, 0.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [0.16, 8.0, 0.5], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Accent"},
+    "markers": [
+      {"actorName": "AMO_Environment_Marker_50m", "actorLabel": "50 m Marker", "actorClass": "AStaticMeshActor", "location": [5000.0, 0.0, 32.0], "rotation": [0.0, 0.0, 0.0], "scale": [0.18, 7.5, 0.12], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_LaneMarker", "distanceMeters": 50},
+      {"actorName": "AMO_Environment_Marker_100m", "actorLabel": "100 m Default Draw Distance Marker", "actorClass": "AStaticMeshActor", "location": [10000.0, 0.0, 32.0], "rotation": [0.0, 0.0, 0.0], "scale": [0.24, 7.5, 0.14], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Accent", "distanceMeters": 100},
+      {"actorName": "AMO_Environment_Marker_200m", "actorLabel": "200 m Far Actor Marker", "actorClass": "AStaticMeshActor", "location": [20000.0, 0.0, 32.0], "rotation": [0.0, 0.0, 0.0], "scale": [0.22, 7.5, 0.14], "mesh": "/Engine/BasicShapes/Cube.Cube", "material": "MI_AMO_Distance", "distanceMeters": 200}
+    ],
+    "labels": [
+      {"actorName": "AMO_Environment_Text_50m", "actorLabel": "50 m Lane Label", "actorClass": "ATextRenderActor", "location": [5000.0, 540.0, 55.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0], "text": "50 m  REFERENCE", "textSize": 120},
+      {"actorName": "AMO_Environment_Text_100m", "actorLabel": "100 m Lane Label", "actorClass": "ATextRenderActor", "location": [10000.0, 540.0, 55.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0], "text": "100 m  DEFAULT DRAW DISTANCE", "textSize": 120},
+      {"actorName": "AMO_Environment_Text_200m", "actorLabel": "200 m Lane Label", "actorClass": "ATextRenderActor", "location": [20000.0, 540.0, 55.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0], "text": "200 m  FAR ACTOR", "textSize": 120}
+    ]
+  },
+  "signage": {
+    "board": "AMO_Environment_TitleBoard",
+    "texts": [
+      {"actorName": "AMO_Environment_Text_Title", "actorLabel": "Title Text", "actorClass": "ATextRenderActor", "location": [0.0, 1190.0, 650.0], "rotation": [0.0, 180.0, 0.0], "scale": [1.0, 1.0, 1.0], "text": "ACTOR METADATA OVERLAY", "textSize": 150},
+      {"actorName": "AMO_Environment_Text_ShowMode", "actorLabel": "Show Mode Text", "actorClass": "ATextRenderActor", "location": [0.0, 1185.0, 455.0], "rotation": [0.0, 180.0, 0.0], "scale": [1.0, 1.0, 1.0], "text": "Viewport Show  /  Actor Metadata Overlay", "textSize": 82},
+      {"actorName": "AMO_Environment_Text_Modes", "actorLabel": "Display Modes Text", "actorClass": "ATextRenderActor", "location": [0.0, 1180.0, 285.0], "rotation": [0.0, 180.0, 0.0], "scale": [1.0, 1.0, 1.0], "text": "Selected Actors   /   All Matching Actors   /   Off", "textSize": 68},
+      {"actorName": "AMO_Environment_Text_Instructions", "actorLabel": "Instruction Text", "actorClass": "ATextRenderActor", "location": [0.0, 1165.0, 120.0], "rotation": [0.0, 180.0, 0.0], "scale": [1.0, 1.0, 1.0], "text": "Select a fixture to inspect metadata.\nThe gray station is excluded with OverlayHidden.\nThe 200 m actor demonstrates draw-distance filtering.", "textSize": 50}
+    ]
+  },
+  "overviewCamera": {
+    "actorName": "AMO_Environment_OverviewCamera",
+    "actorLabel": "Overview Camera",
+    "actorClass": "ACameraActor",
+    "location": [0.0, -3200.0, 1600.0],
+    "rotation": [-25.0, 90.0, 0.0],
+    "fov": 55.0,
+    "target": [0.0, -250.0, 250.0],
+    "composition": "Perspective view of the showcase plaza, title board, and distance lane entrance."
   },
   "rules": [
     {

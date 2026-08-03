@@ -1,11 +1,12 @@
 # Actor Metadata Overlay Sample
 
-This repository contains the free sample project and demo fixtures for [Actor Metadata Overlay](https://github.com/metyatech/EditorActorTagDisplayPlugin).
+This repository contains the public sample project and demo fixtures for [Actor Metadata Overlay](https://github.com/metyatech/EditorActorTagDisplayPlugin).
+The overview map is a finished technical showcase: it introduces the product in one view, then gives each supported metadata source a dedicated fixture station and a distance-filter lane.
 The paid Actor Metadata Overlay plugin is not included.
 
 ## What this repository contains
 
-The project is a small Unreal Engine 5.6-based verification map. It demonstrates actor labels, Actor Tags, Gameplay Tags, folders, Data Layers, editable property tokens, distance filtering, bounding boxes, and an excluded actor. The same source builds with Unreal Engine 5.7 and 5.8.
+The project is authored with Unreal Engine 5.6 and is verified with Unreal Engine 5.6, 5.7, and 5.8. It demonstrates actor labels, Actor Tags, Gameplay Tags, folders, Data Layers, editable property tokens, distance filtering, bounding boxes, and an excluded actor in a presentation-ready map.
 
 ## What is not included
 
@@ -44,7 +45,11 @@ The Unreal project name is `ActorMetadataSample` (19 characters); the public rep
 
 The initial display mode is the product default, `Selected Actors`. The sample contains no startup script that changes it.
 
-The overview map is a bright, neutral outdoor test lane made only from Unreal Engine standard actors and Basic Shapes. It is intended to be used directly in `Lit` view: a floor, sun, sky light, and sky atmosphere keep the fixture silhouettes readable, while the point fixtures use distinct shapes. `AMO_DemoRegion` still loads the World Partition demo area, but the editor-only region wireframe is temporarily hidden in the normal viewport. This visual environment is sample-only and is never synchronized to the Capture Host or the paid plugin.
+![Actor Metadata Overlay showcase overview](Documentation/Images/actor-metadata-overlay-showcase.png)
+
+The overview map is a bright, neutral outdoor test lane made only from Unreal Engine standard actors and Basic Shapes. It is intended to be used directly in `Lit` view: a floor, movable sun, captured-scene sky light, and sky atmosphere keep the fixture silhouettes readable, while the point fixtures use distinct shapes. `AMO_DemoRegion` still loads the World Partition demo area, but the editor-only region wireframe is temporarily hidden in the normal viewport. This visual environment is sample-only and is never synchronized to the Capture Host or the paid plugin.
+
+The map is organized as a central showcase plaza with seven stations: Loot, Spawn, Quest, Navigation, Zone, Filtered, and Distance. A separate lane marks `50 m` reference, `100 m` default draw distance, and `200 m` far-actor behavior. The sample owns one material master and thirteen material instances under `Content/ActorMetadataOverlayDemo/Visuals/Materials`; the materials use no textures or external assets.
 
 ## Try Selected / All / Off
 
@@ -75,6 +80,16 @@ The point rule uses the product's global distance limit. The zone rule enables b
 - If the project reports a missing plugin, copy the matching paid `EditorActorTagDisplay` folder into `Plugins/EditorActorTagDisplay/` before opening it.
 - If C++ modules are missing, install the C++ workload and rebuild the editor target with the selected engine version.
 - If the map needs to be regenerated, run `Scripts/Build-DemoMap.py` explicitly from an unattended Unreal Editor command line. It is not a startup script.
+
+## Development verification
+
+Run the repository checks from the sample root after selecting an engine version:
+
+```powershell
+.\Scripts\Verify-Sample.ps1 -EngineVersion 5.6 -OutputPath .verification\verify-5.6.json
+```
+
+`Build-DemoMap.py` is an explicit authoring command for regenerating the canonical map. `Setup-Local.ps1` copies and builds a local plugin instance without changing the source plugin repository. Presentation actors and sample materials are deliberately excluded from Capture Host synchronization.
 
 ## Supported engine versions
 

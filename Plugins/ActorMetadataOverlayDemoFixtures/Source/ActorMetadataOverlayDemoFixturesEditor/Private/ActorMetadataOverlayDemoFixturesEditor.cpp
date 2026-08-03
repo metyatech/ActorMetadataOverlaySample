@@ -1,7 +1,13 @@
 #include "Editor.h"
 #include "EngineUtils.h"
 #include "LocationVolume.h"
+#include "Misc/App.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Subsystems/UnrealEditorSubsystem.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogActorMetadataOverlayDemoFixturesEditor, Log, All);
 
@@ -93,7 +99,67 @@ private:
             WarnRegionProblem(TEXT("the actor could not be temporarily hidden in the editor"));
             return false;
         }
+        ConfigureInitialOverviewViewport();
         return true;
+    }
+
+    void ConfigureInitialOverviewViewport()
+    {
+        if (bInitialViewportConfigured || FApp::IsUnattended() || GIsAutomationTesting || IsRunningCommandlet())
+        {
+            return;
+        }
+
+        FString Contents;
+        if (!FFileHelper::LoadFileToString(Contents, *(FPaths::ProjectDir() / TEXT("Demo/demo-spec.json"))))
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Warning,
+                TEXT("Could not read Demo/demo-spec.json for the initial Overview Camera composition."));
+            return;
+        }
+
+        TSharedPtr<FJsonObject> Spec;
+        const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Contents);
+        if (!FJsonSerializer::Deserialize(Reader, Spec) || !Spec.IsValid())
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Warning,
+                TEXT("Could not parse Demo/demo-spec.json for the initial Overview Camera composition."));
+            return;
+        }
+
+        const TSharedPtr<FJsonObject>* CameraObject = nullptr;
+        if (!Spec->TryGetObjectField(TEXT("overviewCamera"), CameraObject) || !CameraObject || !CameraObject->IsValid())
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Warning,
+                TEXT("demo-spec.json has no overviewCamera object for the initial viewport composition."));
+            return;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* LocationValues = nullptr;
+        const TArray<TSharedPtr<FJsonValue>>* RotationValues = nullptr;
+        if (!(*CameraObject)->TryGetArrayField(TEXT("location"), LocationValues) || !LocationValues || LocationValues->Num() != 3 ||
+            !(*CameraObject)->TryGetArrayField(TEXT("rotation"), RotationValues) || !RotationValues || RotationValues->Num() != 3)
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Warning,
+                TEXT("demo-spec.json overviewCamera must contain three-value location and rotation arrays."));
+            return;
+        }
+
+        const FVector Location(
+            (*LocationValues)[0]->AsNumber(),
+            (*LocationValues)[1]->AsNumber(),
+            (*LocationValues)[2]->AsNumber());
+        const FRotator Rotation(
+            (*RotationValues)[0]->AsNumber(),
+            (*RotationValues)[1]->AsNumber(),
+            (*RotationValues)[2]->AsNumber());
+        if (UUnrealEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>())
+        {
+            EditorSubsystem->SetLevelViewportCameraInfo(Location, Rotation);
+            bInitialViewportConfigured = true;
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Display,
+                TEXT("Initial Overview Camera composition applied once for the Editor session."));
+        }
     }
 
     void WarnRegionProblem(const TCHAR* Reason)
@@ -114,6 +180,7 @@ private:
 
     FDelegateHandle MapOpenedHandle;
     bool bRegionWarningIssued = false;
+    bool bInitialViewportConfigured = false;
 };
 
 IMPLEMENT_MODULE(FActorMetadataOverlayDemoFixturesEditorModule, ActorMetadataOverlayDemoFixturesEditor);

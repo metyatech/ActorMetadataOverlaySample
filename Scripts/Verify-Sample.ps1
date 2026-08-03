@@ -40,7 +40,7 @@ if (-not $spec.editorRegion -or $spec.editorRegion.actorClass -ne 'ALocationVolu
 }
 
 $visualEnvironment = $spec.visualEnvironment
-if (-not $visualEnvironment -or $visualEnvironment.style -ne 'neutral-outdoor-test-lane' -or $visualEnvironment.folder -ne 'ActorMetadataOverlayDemo/Environment') {
+if (-not $visualEnvironment -or $visualEnvironment.style -ne 'polished-technical-showcase' -or $visualEnvironment.folder -ne 'ActorMetadataOverlayDemo/Environment') {
     throw 'demo-spec.json visualEnvironment is missing or has an unexpected style/folder.'
 }
 $environmentEntries = @($visualEnvironment.floor, $visualEnvironment.directionalLight, $visualEnvironment.skyLight, $visualEnvironment.skyAtmosphere)
@@ -53,13 +53,38 @@ if (($environmentNames | Select-Object -Unique).Count -ne 4 -or $environmentName
 }
 $fixtureNames = @($spec.actors | ForEach-Object { $_.actorName })
 $regionNames = @($spec.editorRegion.actorName)
-$generatedActorWaitSet = @($fixtureNames) + @($regionNames) + @($environmentNames)
+$presentationNames = @()
+$presentation = $spec.presentation
+if (-not $presentation -or $presentation.style -ne 'polished-technical-showcase' -or -not $presentation.plaza) {
+    throw 'demo-spec.json presentation is missing or has an unexpected style/plaza definition.'
+}
+$presentationEntries = @(
+    $presentation.plaza.floor
+    $presentation.plaza.borders
+    $presentation.plaza.accentLines
+    $presentation.plaza.backdrop
+    $spec.stations
+    $spec.distanceLane.floor
+    $spec.distanceLane.borders
+    $spec.distanceLane.boundary
+    $spec.distanceLane.markers
+    $spec.distanceLane.labels
+    $spec.signage.texts
+    $spec.overviewCamera
+)
+foreach ($entry in $presentationEntries) {
+    if (-not $entry -or [string]::IsNullOrWhiteSpace([string]$entry.actorName) -or $entry.actorName -notlike 'AMO_Environment_*') {
+        throw 'Every presentation actor must define a unique AMO_Environment_ actorName.'
+    }
+    $presentationNames += $entry.actorName
+}
+$generatedActorWaitSet = @($fixtureNames) + @($regionNames) + @($environmentNames) + @($presentationNames)
 $generatedActorWaitUnique = @($generatedActorWaitSet | Select-Object -Unique)
 if ($fixtureNames.Count -ne 7 -or $regionNames.Count -ne 1 -or $environmentNames.Count -ne 4) {
     throw "Expected generated actor groups of 7 fixtures, 1 region, and 4 environment actors; found $($fixtureNames.Count), $($regionNames.Count), and $($environmentNames.Count)."
 }
-if ($generatedActorWaitSet.Count -ne 12 -or $generatedActorWaitUnique.Count -ne 12) {
-    throw "Expected generated actor wait set of 12 unique names; found $($generatedActorWaitSet.Count) names and $($generatedActorWaitUnique.Count) unique names."
+if ($presentationNames.Count -ne 30 -or $generatedActorWaitSet.Count -ne 42 -or $generatedActorWaitUnique.Count -ne 42) {
+    throw "Expected 30 presentation actors and a 42-name generated actor wait set; found $($presentationNames.Count), $($generatedActorWaitSet.Count), and $($generatedActorWaitUnique.Count)."
 }
 if (@($generatedActorWaitSet | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0) {
     throw 'Generated actor wait set contains an empty actor name.'
@@ -87,6 +112,51 @@ if ($invalidVisualMeshes.Count -gt 0) {
 $visualMeshPaths = @($pointActors | ForEach-Object { $_.visualMesh })
 if (($visualMeshPaths | Where-Object { $_ -notlike '/Engine/BasicShapes/*' }).Count -gt 0) {
     throw 'A visualMesh outside Engine Basic Shapes was found.'
+}
+
+$materials = $spec.materials
+$materialRoot = '/Game/ActorMetadataOverlayDemo/Visuals/Materials'
+if (-not $materials -or $materials.root -ne $materialRoot -or -not $materials.master -or $materials.master.path -ne "$materialRoot/M_AMO_Surface") {
+    throw 'demo-spec.json materials must define the Sample-owned M_AMO_Surface root.'
+}
+if (@($materials.master.parameters.PSObject.Properties).Count -ne 5 -or
+    'BaseColor' -notin @($materials.master.parameters.PSObject.Properties.Name) -or
+    'Roughness' -notin @($materials.master.parameters.PSObject.Properties.Name) -or
+    'Metallic' -notin @($materials.master.parameters.PSObject.Properties.Name) -or
+    'EmissiveColor' -notin @($materials.master.parameters.PSObject.Properties.Name) -or
+    'EmissiveStrength' -notin @($materials.master.parameters.PSObject.Properties.Name)) {
+    throw 'M_AMO_Surface must define BaseColor, Roughness, Metallic, EmissiveColor, and EmissiveStrength parameters.'
+}
+$materialInstances = @($materials.instances)
+if ($materialInstances.Count -ne 13) {
+    throw "Expected exactly 13 Sample Material Instances; found $($materialInstances.Count)."
+}
+$materialInstanceNames = @($materialInstances | ForEach-Object { $_.name })
+if (($materialInstanceNames | Select-Object -Unique).Count -ne 13 -or @($materialInstances | Where-Object { $_.path -notlike "$materialRoot/*" }).Count -gt 0) {
+    throw 'Material Instance names or paths are not unique and Sample-owned.'
+}
+foreach ($fixture in $spec.actors) {
+    if ([string]::IsNullOrWhiteSpace([string]$fixture.visualMaterial) -or $fixture.visualMaterial -notin $materialInstanceNames) {
+        throw "Fixture $($fixture.actorName) has no valid Sample visualMaterial assignment."
+    }
+}
+if (-not $materials.fixtureAssignments -or @($materials.fixtureAssignments.PSObject.Properties).Count -ne 7) {
+    throw 'materials.fixtureAssignments must cover all seven fixture actors.'
+}
+$materialAssetRoot = Join-Path $sampleRoot 'Content\ActorMetadataOverlayDemo\Visuals\Materials'
+$expectedMaterialFiles = @('M_AMO_Surface.uasset') + @($materialInstanceNames | ForEach-Object { "${_}.uasset" })
+$actualMaterialFiles = @()
+if (Test-Path -LiteralPath $materialAssetRoot) {
+    $actualMaterialFiles = @(Get-ChildItem -LiteralPath $materialAssetRoot -File -Force | ForEach-Object { $_.Name })
+}
+$missingMaterialFiles = @($expectedMaterialFiles | Where-Object { $_ -notin $actualMaterialFiles })
+$unexpectedMaterialFiles = @($actualMaterialFiles | Where-Object { $_ -notin $expectedMaterialFiles })
+if ($missingMaterialFiles.Count -gt 0 -or $unexpectedMaterialFiles.Count -gt 0) {
+    throw "Sample material asset set mismatch. Missing: $($missingMaterialFiles -join ', '); unexpected: $($unexpectedMaterialFiles -join ', ')"
+}
+$textureAssets = @(Get-ChildItem -LiteralPath (Join-Path $sampleRoot 'Content') -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @('.utexture', '.png', '.jpg', '.jpeg', '.exr', '.hdr') })
+if ($textureAssets.Count -gt 0) {
+    throw "Sample must not add texture assets for the showcase: $($textureAssets -join ', ')"
 }
 
 $projectPath = Join-Path $sampleRoot 'ActorMetadataSample.uproject'
@@ -261,22 +331,28 @@ if ($LASTEXITCODE -eq 0 -and $displayModeAssignments) {
     throw 'Sample scripts contain a DisplayMode assignment.'
 }
 $captureScriptText = Get-Content -LiteralPath (Join-Path $sampleRoot 'Scripts/Capture/Apply-DemoSpec.py') -Raw
-if ($captureScriptText.Contains('visualEnvironment') -or $captureScriptText.Contains('visualMesh')) {
-    throw 'Capture Apply script must not apply the public visual environment or fixture visual meshes.'
+foreach ($ignoredCaptureKey in @('visualEnvironment', 'visualMesh', 'visualMaterial', 'materials', 'presentation', 'stations', 'distanceLane', 'signage', 'overviewCamera')) {
+    if ($captureScriptText.Contains($ignoredCaptureKey)) {
+        throw "Capture Apply script must ignore the public presentation key '$ignoredCaptureKey'."
+    }
 }
-if (-not $scriptText.Contains('ensure_visual_environment') -or -not $scriptText.Contains('AMO_Environment_') -or -not $scriptText.Contains('assign_basic_shape_mesh')) {
+if (-not $scriptText.Contains('ensure_visual_environment') -or -not $scriptText.Contains('AMO_Environment_') -or -not $scriptText.Contains('assign_basic_shape_mesh') -or -not $scriptText.Contains('ensure_material_system') -or -not $scriptText.Contains('presentation_actor_entries')) {
     throw 'Build-DemoMap.py does not contain the required environment regeneration and Basic Shape assignment paths.'
 }
 if (-not $scriptText.Contains('def get_required_generated_actor_names') -or
     -not $scriptText.Contains('actor_entries = spec.get("actors")') -or
     -not $scriptText.Contains('region_spec.get("actorName")') -or
-    -not $scriptText.Contains('visual_environment[key].get("actorName")') -or
-    -not $scriptText.Contains('VISUAL_ENVIRONMENT_KEYS')) {
+    -not $scriptText.Contains('visual_environment.get(key)') -or
+    -not $scriptText.Contains('VISUAL_ENVIRONMENT_KEYS') -or
+    -not $scriptText.Contains('presentation_actor_entries(spec)')) {
     throw 'Build-DemoMap.py does not build the required generated actor wait set from demo-spec.json.'
 }
 if (-not $scriptText.Contains('required_names = get_required_generated_actor_names(spec)') -or
     $scriptText.Contains('required_names = {entry["actorName"] for entry in spec["actors"]}')) {
     throw 'wait_for_existing_generated_actors must use the shared generated actor wait-set helper without excluding visual environment actors.'
+}
+if (-not $scriptText.Contains('state["attempts"] >= 30') -or -not $scriptText.Contains('actor set differs from demo-spec.json')) {
+    throw 'Build-DemoMap.py must recover from an older generated actor set instead of waiting forever.'
 }
 if (-not $scriptText.Contains('missing = sorted(required_name_set - current_names)') -or
     -not $scriptText.Contains('Timed out waiting') -or
@@ -329,8 +405,8 @@ $testSourcePath = Join-Path $sampleRoot 'Plugins/ActorMetadataOverlayDemoFixture
 $testSourceText = Get-Content -LiteralPath $testSourcePath -Raw
 $automationTestMatches = [regex]::Matches($testSourceText, '(?s)IMPLEMENT_(?:SIMPLE|CUSTOM_COMPLEX|COMPLEX)_AUTOMATION_TEST\s*\([^,]+,\s*"([^"]+)"')
 $automationTestPaths = @($automationTestMatches | ForEach-Object { $_.Groups[1].Value })
-if ($automationTestPaths.Count -ne 9 -or 'ActorMetadataOverlay.Sample.RegionReopen' -notin $automationTestPaths -or 'ActorMetadataOverlay.Sample.VisualEnvironment' -notin $automationTestPaths) {
-    throw "Expected exactly nine Sample automation tests including VisualEnvironment and RegionReopen; found $($automationTestPaths.Count): $($automationTestPaths -join ', ')."
+if ($automationTestPaths.Count -ne 10 -or 'ActorMetadataOverlay.Sample.RegionReopen' -notin $automationTestPaths -or 'ActorMetadataOverlay.Sample.VisualEnvironment' -notin $automationTestPaths -or 'ActorMetadataOverlay.Sample.Presentation' -notin $automationTestPaths) {
+    throw "Expected exactly ten Sample automation tests including VisualEnvironment, Presentation, and RegionReopen; found $($automationTestPaths.Count): $($automationTestPaths -join ', ')."
 }
 $regionReopenSectionMatch = [regex]::Match($testSourceText, '(?s)IMPLEMENT_SIMPLE_AUTOMATION_TEST\(FActorMetadataSampleRegionReopenTest.*\z')
 if (-not $regionReopenSectionMatch.Success) {
@@ -347,24 +423,6 @@ if (-not $visualEnvironmentSectionMatch.Success) {
 if ($visualEnvironmentSectionMatch.Value.Contains('ForEachActorWithLoading') -or $visualEnvironmentSectionMatch.Value.Contains('DemoRegion->Load') -or $visualEnvironmentSectionMatch.Value.Contains('ALocationVolume::Load')) {
     throw 'VisualEnvironment must use normal actor iteration and must not explicitly load the region or fixture actors.'
 }
-$trackedMaterialTextureAssets = @()
-if (Test-Path -LiteralPath (Join-Path $sampleRoot '.git')) {
-    $trackedMaterialTextureAssets = @(git -C $sampleRoot ls-files -- 'Content/**' | Where-Object { $_ -match '(?i)(\.umaterial|\.utexture|Material|Texture).*(\.uasset|\.umap)$' })
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Unable to inspect tracked Sample Content assets.'
-    }
-} else {
-    $contentRoot = Join-Path $sampleRoot 'Content'
-    if (Test-Path -LiteralPath $contentRoot) {
-        $trackedMaterialTextureAssets = @(Get-ChildItem -LiteralPath $contentRoot -Recurse -File -Force | Where-Object {
-            $_.Name -match '(?i)(\.umaterial|\.utexture|Material|Texture).*(\.uasset|\.umap)$'
-        } | ForEach-Object { Get-RelativePath $sampleRoot $_.FullName })
-    }
-}
-if ($trackedMaterialTextureAssets.Count -gt 0) {
-    throw "Sample must not add Material or Texture assets: $($trackedMaterialTextureAssets -join ', ')"
-}
-
 $mapPath = Join-Path $sampleRoot 'Content\ActorMetadataOverlayDemo\Maps\ActorMetadataOverlayOverview.umap'
 $mapState = [pscustomobject]@{
     Exists = Test-Path -LiteralPath $mapPath
@@ -417,6 +475,21 @@ $result = [pscustomobject]@{
         CaptureApplyExcludesVisuals = $true
         NewMaterialTextureAssets = 0
     }
+    PresentationStyle = $presentation.style
+    MaterialAssets = $actualMaterialFiles
+    MaterialInstanceCount = $materialInstances.Count
+    DefaultMaterialFixtureCount = 0
+    PresentationActorNames = $presentationNames
+    PresentationActorCount = $presentationNames.Count
+    OverviewCamera = [pscustomobject]@{
+        ActorName = $spec.overviewCamera.actorName
+        Location = $spec.overviewCamera.location
+        Rotation = $spec.overviewCamera.rotation
+        Fov = $spec.overviewCamera.fov
+        SpatiallyLoaded = $false
+    }
+    DistanceMarkers = @($spec.distanceLane.markers | ForEach-Object { [pscustomobject]@{ ActorName = $_.actorName; DistanceMeters = $_.distanceMeters } })
+    CaptureApplyExcludesPresentation = $true
     GeneratedActorWaitSet = $generatedActorWaitSet
     GeneratedActorWaitCount = $generatedActorWaitSet.Count
     GeneratedActorWaitUnique = ($generatedActorWaitUnique.Count -eq $generatedActorWaitSet.Count)

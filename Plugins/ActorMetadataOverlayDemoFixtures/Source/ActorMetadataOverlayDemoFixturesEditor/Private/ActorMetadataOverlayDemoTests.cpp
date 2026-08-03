@@ -1,6 +1,9 @@
 #include "ActorMetadataOverlayDemoActor.h"
 #include "ActorMetadataOverlayDemoZone.h"
 
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Dom/JsonObject.h"
 #include "Editor.h"
 #include "Engine/DirectionalLight.h"
@@ -20,6 +23,9 @@
 #include "Serialization/JsonSerializer.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "LocationVolume.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialExpressionParameter.h"
+#include "Materials/MaterialInstanceConstant.h"
 #include "WorldPartition/WorldPartition.h"
 #include "WorldPartition/WorldPartitionHelpers.h"
 
@@ -131,6 +137,21 @@ namespace ActorMetadataOverlayDemoTests
         FString Contents;
         FFileHelper::LoadFileToString(Contents, *(FPaths::ProjectDir() / RelativePath));
         return Contents;
+    }
+
+    AActor* FindActorByName(UWorld* World, const FString& ActorName, int32& OutCount)
+    {
+        AActor* FoundActor = nullptr;
+        OutCount = 0;
+        for (TActorIterator<AActor> It(World); It; ++It)
+        {
+            if (It->GetFName() == FName(*ActorName))
+            {
+                FoundActor = *It;
+                ++OutCount;
+            }
+        }
+        return FoundActor;
     }
 }
 
@@ -669,6 +690,223 @@ bool FActorMetadataSampleVisualEnvironmentTest::RunTest(const FString& Parameter
     const FString UserConfig = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Config/DefaultEditorPerProjectUserSettings.ini"));
     TestTrue(TEXT("visual environment does not change Display Mode"), UserConfig.Contains(TEXT("DisplayMode=Selected")));
     TestFalse(TEXT("visual environment has no Python startup hook"), FPaths::FileExists(FPaths::ProjectDir() / TEXT("Content/Python/init_unreal.py")));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataSamplePresentationTest,
+    "ActorMetadataOverlay.Sample.Presentation",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FActorMetadataSamplePresentationTest::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    TestNotNull(TEXT("presentation test editor world"), World);
+    if (!World)
+    {
+        return false;
+    }
+
+    TestEqual(TEXT("presentation exact overview map"), World->GetOutermost()->GetName(), FString(ActorMetadataOverlayDemoTests::DemoMapPackage));
+    TestNotNull(TEXT("presentation World Partition exists"), World->GetWorldPartition());
+
+    TSharedPtr<FJsonObject> Spec;
+    FString Error;
+    TestTrue(TEXT("presentation spec loads"), ActorMetadataOverlayDemoTests::LoadSpec(Spec, Error));
+    if (!Spec.IsValid())
+    {
+        AddError(Error);
+        return false;
+    }
+
+    const TSharedPtr<FJsonObject> Presentation = Spec->GetObjectField(TEXT("presentation"));
+    TestEqual(TEXT("presentation style"), Presentation->GetStringField(TEXT("style")), FString(TEXT("polished-technical-showcase")));
+    const TSharedPtr<FJsonObject> Materials = Spec->GetObjectField(TEXT("materials"));
+    const FString MaterialRoot = Materials->GetStringField(TEXT("root"));
+    const TSharedPtr<FJsonObject> MasterSpec = Materials->GetObjectField(TEXT("master"));
+    const FString MasterName = MasterSpec->GetStringField(TEXT("name"));
+    const FString MasterObjectPath = MasterSpec->GetStringField(TEXT("path")) + TEXT(".") + MasterName;
+    UMaterial* Master = Cast<UMaterial>(StaticLoadObject(UMaterial::StaticClass(), nullptr, *MasterObjectPath));
+    TestNotNull(TEXT("exactly one Sample master material loads"), Master);
+    if (!Master)
+    {
+        return false;
+    }
+
+    TSet<FName> MaterialParameterNames;
+    for (UMaterialExpression* Expression : Master->GetExpressions())
+    {
+        if (const UMaterialExpressionParameter* Parameter = Cast<UMaterialExpressionParameter>(Expression))
+        {
+            MaterialParameterNames.Add(Parameter->GetParameterName());
+        }
+    }
+    for (const TCHAR* ParameterName : {TEXT("BaseColor"), TEXT("Roughness"), TEXT("Metallic"), TEXT("EmissiveColor"), TEXT("EmissiveStrength")})
+    {
+        TestTrue(FString::Printf(TEXT("master parameter exists: %s"), ParameterName), MaterialParameterNames.Contains(FName(ParameterName)));
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>& InstanceValues = Materials->GetArrayField(TEXT("instances"));
+    TestEqual(TEXT("required Material Instance count"), InstanceValues.Num(), 13);
+    TSet<FString> InstancePaths;
+    for (const TSharedPtr<FJsonValue>& InstanceValue : InstanceValues)
+    {
+        const TSharedPtr<FJsonObject> InstanceSpec = InstanceValue->AsObject();
+        const FString InstanceName = InstanceSpec->GetStringField(TEXT("name"));
+        const FString InstancePath = InstanceSpec->GetStringField(TEXT("path"));
+        TestTrue(FString::Printf(TEXT("Material Instance name is unique: %s"), *InstanceName), !InstancePaths.Contains(InstanceName));
+        InstancePaths.Add(InstanceName);
+        UMaterialInstanceConstant* Instance = Cast<UMaterialInstanceConstant>(StaticLoadObject(
+            UMaterialInstanceConstant::StaticClass(), nullptr, *(InstancePath + TEXT(".") + InstanceName)));
+        TestNotNull(FString::Printf(TEXT("Material Instance loads: %s"), *InstanceName), Instance);
+        if (Instance)
+        {
+            TestTrue(FString::Printf(TEXT("Material Instance parent: %s"), *InstanceName), Instance->Parent.Get() == Master);
+        }
+    }
+
+    const TSharedPtr<FJsonObject> Assignments = Materials->GetObjectField(TEXT("fixtureAssignments"));
+    TSet<FString> FixtureMaterialPaths;
+    TSet<FString> FixtureShapePaths;
+    int32 AssignedPointFixtureCount = 0;
+    for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Assignments->Values)
+    {
+        const FString ActorName = Pair.Key;
+        const FString MaterialName = Pair.Value->AsString();
+        int32 NameCount = 0;
+        AActor* Actor = ActorMetadataOverlayDemoTests::FindActorByName(World, ActorName, NameCount);
+        TestEqual(FString::Printf(TEXT("fixture assignment actor is unique: %s"), *ActorName), NameCount, 1);
+        TestNotNull(FString::Printf(TEXT("fixture assignment actor exists: %s"), *ActorName), Actor);
+        if (!Actor || !Actor->IsA<AActorMetadataOverlayDemoActor>())
+        {
+            continue;
+        }
+
+        ++AssignedPointFixtureCount;
+        AActorMetadataOverlayDemoActor* PointActor = CastChecked<AActorMetadataOverlayDemoActor>(Actor);
+        TestNotNull(FString::Printf(TEXT("fixture mesh exists: %s"), *ActorName), PointActor->Mesh.Get());
+        if (PointActor->Mesh)
+        {
+            const FString MeshPath = PointActor->Mesh->GetStaticMesh() ? PointActor->Mesh->GetStaticMesh()->GetPathName() : FString();
+            const FString MaterialPath = PointActor->Mesh->GetMaterial(0) ? PointActor->Mesh->GetMaterial(0)->GetPathName() : FString();
+            TestTrue(FString::Printf(TEXT("fixture mesh is an Engine Basic Shape: %s"), *ActorName), MeshPath.StartsWith(TEXT("/Engine/BasicShapes/")));
+            const FString ExpectedMaterialPath = MaterialRoot + TEXT("/") + MaterialName;
+            TestTrue(FString::Printf(TEXT("fixture material assignment: %s"), *ActorName),
+                MaterialPath == ExpectedMaterialPath || MaterialPath.StartsWith(ExpectedMaterialPath + TEXT(".")));
+            TestTrue(FString::Printf(TEXT("fixture has no Default Material: %s"), *ActorName), MaterialPath.StartsWith(MaterialRoot + TEXT("/MI_AMO_")));
+            FixtureShapePaths.Add(MeshPath);
+            FixtureMaterialPaths.Add(MaterialPath);
+        }
+    }
+    TestEqual(TEXT("six point fixtures have Material assignments"), AssignedPointFixtureCount, 6);
+    TestTrue(TEXT("at least four Engine Basic Shapes are used"), FixtureShapePaths.Num() >= 4);
+    TestTrue(TEXT("at least six fixture materials are distinct"), FixtureMaterialPaths.Num() >= 6);
+
+    const TArray<TSharedPtr<FJsonValue>>& StationValues = Spec->GetArrayField(TEXT("stations"));
+    TestEqual(TEXT("seven station platforms"), StationValues.Num(), 7);
+    TSet<FString> PresentationNames;
+    auto CheckStaticPresentationActor = [this, World, &PresentationNames, &MaterialRoot](const TSharedPtr<FJsonObject>& ActorSpec, const TCHAR* Description)
+    {
+        const FString ActorName = ActorSpec->GetStringField(TEXT("actorName"));
+        int32 NameCount = 0;
+        AActor* Actor = ActorMetadataOverlayDemoTests::FindActorByName(World, ActorName, NameCount);
+        TestEqual(FString::Printf(TEXT("%s name unique: %s"), Description, *ActorName), NameCount, 1);
+        TestNotNull(FString::Printf(TEXT("%s exists: %s"), Description, *ActorName), Actor);
+        TestTrue(FString::Printf(TEXT("%s is not a fixture class: %s"), Description, *ActorName), !Actor ||
+            (!Actor->IsA<AActorMetadataOverlayDemoActor>() && !Actor->IsA<AActorMetadataOverlayDemoZone>()));
+        TestTrue(FString::Printf(TEXT("%s has a unique presentation name: %s"), Description, *ActorName), !PresentationNames.Contains(ActorName));
+        PresentationNames.Add(ActorName);
+        if (AStaticMeshActor* StaticMeshActor = Cast<AStaticMeshActor>(Actor))
+        {
+            UStaticMeshComponent* Mesh = StaticMeshActor->GetStaticMeshComponent();
+            TestEqual(FString::Printf(TEXT("%s mesh is Engine Basic Shape: %s"), Description, *ActorName),
+                Mesh && Mesh->GetStaticMesh() ? Mesh->GetStaticMesh()->GetPathName() : FString(), ActorSpec->GetStringField(TEXT("mesh")));
+            const FString MaterialPath = Mesh && Mesh->GetMaterial(0) ? Mesh->GetMaterial(0)->GetPathName() : FString();
+            const FString ExpectedMaterialPath = MaterialRoot + TEXT("/") + ActorSpec->GetStringField(TEXT("material"));
+            TestTrue(FString::Printf(TEXT("%s material: %s"), Description, *ActorName),
+                MaterialPath == ExpectedMaterialPath || MaterialPath.StartsWith(ExpectedMaterialPath + TEXT(".")));
+        }
+    };
+
+    for (const TSharedPtr<FJsonValue>& StationValue : StationValues)
+    {
+        CheckStaticPresentationActor(StationValue->AsObject(), TEXT("station platform"));
+    }
+
+    const TSharedPtr<FJsonObject> Plaza = Presentation->GetObjectField(TEXT("plaza"));
+    CheckStaticPresentationActor(Plaza->GetObjectField(TEXT("floor")), TEXT("plaza floor"));
+    CheckStaticPresentationActor(Plaza->GetObjectField(TEXT("backdrop")), TEXT("title board"));
+    for (const TSharedPtr<FJsonValue>& BorderValue : Plaza->GetArrayField(TEXT("borders")))
+    {
+        CheckStaticPresentationActor(BorderValue->AsObject(), TEXT("plaza border"));
+    }
+    for (const TSharedPtr<FJsonValue>& AccentValue : Plaza->GetArrayField(TEXT("accentLines")))
+    {
+        CheckStaticPresentationActor(AccentValue->AsObject(), TEXT("plaza accent"));
+    }
+
+    const TSharedPtr<FJsonObject> Lane = Spec->GetObjectField(TEXT("distanceLane"));
+    CheckStaticPresentationActor(Lane->GetObjectField(TEXT("floor")), TEXT("distance lane floor"));
+    CheckStaticPresentationActor(Lane->GetObjectField(TEXT("boundary")), TEXT("100m boundary"));
+    const TArray<TSharedPtr<FJsonValue>>& MarkerValues = Lane->GetArrayField(TEXT("markers"));
+    TestEqual(TEXT("distance marker count"), MarkerValues.Num(), 3);
+    for (const TSharedPtr<FJsonValue>& MarkerValue : MarkerValues)
+    {
+        CheckStaticPresentationActor(MarkerValue->AsObject(), TEXT("distance marker"));
+    }
+    for (const TSharedPtr<FJsonValue>& BorderValue : Lane->GetArrayField(TEXT("borders")))
+    {
+        CheckStaticPresentationActor(BorderValue->AsObject(), TEXT("distance lane border"));
+    }
+
+    const TSharedPtr<FJsonObject> Signage = Spec->GetObjectField(TEXT("signage"));
+    TSet<FString> SignageText;
+    for (const TSharedPtr<FJsonValue>& TextValue : Signage->GetArrayField(TEXT("texts")))
+    {
+        const TSharedPtr<FJsonObject> TextSpec = TextValue->AsObject();
+        const FString ActorName = TextSpec->GetStringField(TEXT("actorName"));
+        int32 NameCount = 0;
+        AActor* Actor = ActorMetadataOverlayDemoTests::FindActorByName(World, ActorName, NameCount);
+        TestEqual(FString::Printf(TEXT("signage actor unique: %s"), *ActorName), NameCount, 1);
+        TestNotNull(FString::Printf(TEXT("signage actor exists: %s"), *ActorName), Actor);
+        UTextRenderComponent* TextComponent = Actor ? Actor->FindComponentByClass<UTextRenderComponent>() : nullptr;
+        TestNotNull(FString::Printf(TEXT("signage text component exists: %s"), *ActorName), TextComponent);
+        if (TextComponent)
+        {
+            SignageText.Add(TextComponent->Text.ToString());
+        }
+    }
+    TestTrue(TEXT("title board text is present"), SignageText.Contains(TEXT("ACTOR METADATA OVERLAY")));
+    TestTrue(TEXT("show mode text is present"), SignageText.Contains(TEXT("Viewport Show  /  Actor Metadata Overlay")));
+
+    const TSharedPtr<FJsonObject> CameraSpec = Spec->GetObjectField(TEXT("overviewCamera"));
+    int32 CameraNameCount = 0;
+    AActor* CameraActor = ActorMetadataOverlayDemoTests::FindActorByName(World, CameraSpec->GetStringField(TEXT("actorName")), CameraNameCount);
+    TestEqual(TEXT("overview camera is unique"), CameraNameCount, 1);
+    TestNotNull(TEXT("overview camera exists"), CameraActor);
+    ACameraActor* OverviewCamera = Cast<ACameraActor>(CameraActor);
+    TestNotNull(TEXT("overview camera is a CameraActor"), OverviewCamera);
+    if (OverviewCamera)
+    {
+        TestTrue(TEXT("overview camera FOV is sane"), OverviewCamera->GetCameraComponent()->FieldOfView > 35.0f && OverviewCamera->GetCameraComponent()->FieldOfView < 80.0f);
+    }
+
+    ALocationVolume* DemoRegion = nullptr;
+    int32 RegionCount = 0;
+    for (TActorIterator<ALocationVolume> It(World); It; ++It)
+    {
+        if (It->GetFName() == ActorMetadataOverlayDemoTests::DemoRegionName)
+        {
+            ++RegionCount;
+            DemoRegion = *It;
+        }
+    }
+    TestEqual(TEXT("presentation region count"), RegionCount, 1);
+    TestTrue(TEXT("presentation region loaded"), DemoRegion && DemoRegion->IsLoaded());
+    TestTrue(TEXT("presentation region hidden"), DemoRegion && DemoRegion->IsTemporarilyHiddenInEditor());
+    TestFalse(TEXT("presentation test does not require startup Python"), FPaths::FileExists(FPaths::ProjectDir() / TEXT("Content/Python/init_unreal.py")));
+
+    const FString UserConfig = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Config/DefaultEditorPerProjectUserSettings.ini"));
+    TestTrue(TEXT("presentation keeps Selected display mode"), UserConfig.Contains(TEXT("DisplayMode=Selected")));
     return true;
 }
 
