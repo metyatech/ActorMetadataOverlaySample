@@ -3,12 +3,19 @@
 
 #include "Dom/JsonObject.h"
 #include "Editor.h"
+#include "Engine/DirectionalLight.h"
 #include "EngineUtils.h"
+#include "Engine/SkyLight.h"
+#include "Engine/StaticMeshActor.h"
 #include "GameplayTagsManager.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Components/SkyAtmosphereComponent.h"
+#include "Components/SkyLightComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Tests/AutomationEditorCommon.h"
@@ -42,6 +49,7 @@ namespace ActorMetadataOverlayDemoTests
         bool bHasWorldPartition = false;
         int32 RegionCount = 0;
         bool bRegionLoaded = false;
+        bool bRegionTemporarilyHidden = false;
         int32 FixtureCount = 0;
         TSet<FString> FixtureLabels;
         bool bFixturesWithinRegion = false;
@@ -71,6 +79,7 @@ namespace ActorMetadataOverlayDemoTests
         }
 
         Snapshot.bRegionLoaded = Snapshot.RegionCount == 1 && DemoRegion && DemoRegion->IsLoaded();
+        Snapshot.bRegionTemporarilyHidden = Snapshot.RegionCount == 1 && DemoRegion && DemoRegion->IsTemporarilyHiddenInEditor();
         Snapshot.bFixturesWithinRegion = Snapshot.RegionCount == 1 && DemoRegion;
         for (TActorIterator<AActor> It(World); It; ++It)
         {
@@ -185,7 +194,7 @@ public:
                 return Snapshot.FixtureLabels.Contains(Label);
             });
         const bool bReady = Snapshot.bHasWorldPartition && Snapshot.RegionCount == 1 && Snapshot.bRegionLoaded &&
-            Snapshot.FixtureCount == 7 && bAllLabelsMatched && Snapshot.bFixturesWithinRegion;
+            Snapshot.bRegionTemporarilyHidden && Snapshot.FixtureCount == 7 && bAllLabelsMatched && Snapshot.bFixturesWithinRegion;
 
         if (!bReady)
         {
@@ -197,10 +206,11 @@ public:
                 }
                 return true;
             }
-            return FinishOrTimeout(CurrentTest, FString::Printf(TEXT("region state is not ready: worldPartition=%s regionCount=%d loaded=%s fixtureCount=%d labels=%s withinBounds=%s"),
+            return FinishOrTimeout(CurrentTest, FString::Printf(TEXT("region state is not ready: worldPartition=%s regionCount=%d loaded=%s hidden=%s fixtureCount=%d labels=%s withinBounds=%s"),
                 Snapshot.bHasWorldPartition ? TEXT("true") : TEXT("false"),
                 Snapshot.RegionCount,
                 Snapshot.bRegionLoaded ? TEXT("true") : TEXT("false"),
+                Snapshot.bRegionTemporarilyHidden ? TEXT("true") : TEXT("false"),
                 Snapshot.FixtureCount,
                 *ActorMetadataOverlayDemoTests::JoinFixtureLabels(Snapshot.FixtureLabels),
                 Snapshot.bFixturesWithinRegion ? TEXT("true") : TEXT("false")));
@@ -212,6 +222,7 @@ public:
             CurrentTest->TestTrue(TEXT("World Partition is present after reopen"), Snapshot.bHasWorldPartition);
             CurrentTest->TestEqual(TEXT("exactly one demo region after reopen"), Snapshot.RegionCount, 1);
             CurrentTest->TestTrue(TEXT("demo region is loaded after reopen"), Snapshot.bRegionLoaded);
+            CurrentTest->TestTrue(TEXT("demo region is temporarily hidden after reopen"), Snapshot.bRegionTemporarilyHidden);
             CurrentTest->TestEqual(TEXT("normal actor iteration finds seven fixtures after reopen"), Snapshot.FixtureCount, 7);
             for (const FString& Label : ActorMetadataOverlayDemoTests::RequiredFixtureLabels())
             {
@@ -221,13 +232,14 @@ public:
         }
 
         const FString UserConfig = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Config/DefaultEditorPerProjectUserSettings.ini"));
-        UE_LOG(LogActorMetadataOverlayDemoTests, Display, TEXT("RegionReopenObservation stage=%s mapOpenCount=%d alternateMapCount=%d overviewReopenCount=%d regionCount=%d regionLoaded=%s fixtureCount=%d labels=%s displayMode=%s"),
+        UE_LOG(LogActorMetadataOverlayDemoTests, Display, TEXT("RegionReopenObservation stage=%s mapOpenCount=%d alternateMapCount=%d overviewReopenCount=%d regionCount=%d regionLoaded=%s regionHidden=%s fixtureCount=%d labels=%s displayMode=%s"),
             OverviewReopenCount == 0 ? TEXT("initial") : TEXT("reopen"),
             OverviewOpenCount,
             OverviewReopenCount,
             OverviewReopenCount,
             Snapshot.RegionCount,
             Snapshot.bRegionLoaded ? TEXT("true") : TEXT("false"),
+            Snapshot.bRegionTemporarilyHidden ? TEXT("true") : TEXT("false"),
             Snapshot.FixtureCount,
             *ActorMetadataOverlayDemoTests::JoinFixtureLabels(Snapshot.FixtureLabels),
             UserConfig.Contains(TEXT("DisplayMode=Selected")) ? TEXT("Selected") : TEXT("Unexpected"));
@@ -473,6 +485,7 @@ bool FActorMetadataSampleInitialRegionTest::RunTest(const FString& Parameters)
 
     TestEqual(TEXT("demo region label"), DemoRegion->GetActorLabel(), FString(TEXT("Actor Metadata Overlay Demo Region")));
     TestTrue(TEXT("demo region is loaded by the editor startup path"), DemoRegion->IsLoaded());
+    TestTrue(TEXT("demo region is temporarily hidden in the editor viewport"), DemoRegion->IsTemporarilyHiddenInEditor());
 
     const TArray<FString> RequiredLabels = {
         TEXT("Loot Crate A"),
@@ -504,6 +517,158 @@ bool FActorMetadataSampleInitialRegionTest::RunTest(const FString& Parameters)
     const FString UserConfig = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Config/DefaultEditorPerProjectUserSettings.ini"));
     TestTrue(TEXT("initial display mode remains Selected"), UserConfig.Contains(TEXT("DisplayMode=Selected")));
     TestFalse(TEXT("sample startup Python is absent"), FPaths::FileExists(FPaths::ProjectDir() / TEXT("Content/Python/init_unreal.py")));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FActorMetadataSampleVisualEnvironmentTest,
+    "ActorMetadataOverlay.Sample.VisualEnvironment",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FActorMetadataSampleVisualEnvironmentTest::RunTest(const FString& Parameters)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    TestNotNull(TEXT("editor world is loaded for the visual environment"), World);
+    if (!World)
+    {
+        return false;
+    }
+
+    TestEqual(TEXT("visual environment exact overview map"), World->GetOutermost()->GetName(), FString(ActorMetadataOverlayDemoTests::DemoMapPackage));
+    TestNotNull(TEXT("visual environment has World Partition"), World->GetWorldPartition());
+
+    TSharedPtr<FJsonObject> Spec;
+    FString Error;
+    TestTrue(TEXT("visual environment spec loads"), ActorMetadataOverlayDemoTests::LoadSpec(Spec, Error));
+    if (!Spec.IsValid())
+    {
+        AddError(Error);
+        return false;
+    }
+
+    const TSharedPtr<FJsonObject> Environment = Spec->GetObjectField(TEXT("visualEnvironment"));
+    const FString EnvironmentFolder = Environment->GetStringField(TEXT("folder"));
+    TArray<AActor*> EnvironmentActors;
+    auto FindNamedActor = [&World](const FString& ActorName, int32& OutCount) -> AActor*
+    {
+        AActor* FoundActor = nullptr;
+        OutCount = 0;
+        for (TActorIterator<AActor> It(World); It; ++It)
+        {
+            if (It->GetFName() == FName(*ActorName))
+            {
+                FoundActor = *It;
+                ++OutCount;
+            }
+        }
+        return FoundActor;
+    };
+    const TArray<FString> EnvironmentKeys = {TEXT("floor"), TEXT("directionalLight"), TEXT("skyLight"), TEXT("skyAtmosphere")};
+    const TArray<UClass*> EnvironmentClasses = {AStaticMeshActor::StaticClass(), ADirectionalLight::StaticClass(), ASkyLight::StaticClass(), ASkyAtmosphere::StaticClass()};
+    for (int32 Index = 0; Index < EnvironmentKeys.Num(); ++Index)
+    {
+        const TSharedPtr<FJsonObject> ActorSpec = Environment->GetObjectField(EnvironmentKeys[Index]);
+        const FString ActorName = ActorSpec->GetStringField(TEXT("actorName"));
+        const FString ActorLabel = ActorSpec->GetStringField(TEXT("actorLabel"));
+        int32 NameCount = 0;
+        AActor* Actor = FindNamedActor(ActorName, NameCount);
+        TestEqual(FString::Printf(TEXT("%s actor name is unique"), *EnvironmentKeys[Index]), NameCount, 1);
+        TestNotNull(FString::Printf(TEXT("%s actor exists"), *EnvironmentKeys[Index]), Actor);
+        if (!Actor)
+        {
+            continue;
+        }
+        EnvironmentActors.Add(Actor);
+        TestEqual(FString::Printf(TEXT("%s actor label"), *EnvironmentKeys[Index]), Actor->GetActorLabel(), ActorLabel);
+        TestEqual(FString::Printf(TEXT("%s actor folder"), *EnvironmentKeys[Index]), Actor->GetFolderPath().ToString(), EnvironmentFolder);
+        TestTrue(FString::Printf(TEXT("%s uses the expected Engine actor class"), *EnvironmentKeys[Index]), Actor->IsA(EnvironmentClasses[Index]));
+        TestFalse(FString::Printf(TEXT("%s is not a fixture actor"), *EnvironmentKeys[Index]), Actor->IsA<AActorMetadataOverlayDemoActor>() || Actor->IsA<AActorMetadataOverlayDemoZone>());
+    }
+
+    AActor* FloorActor = EnvironmentActors.Num() > 0 ? EnvironmentActors[0] : nullptr;
+    AStaticMeshActor* Floor = Cast<AStaticMeshActor>(FloorActor);
+    UStaticMeshComponent* FloorMesh = Floor ? Floor->GetStaticMeshComponent() : nullptr;
+    TestNotNull(TEXT("floor static mesh component exists"), FloorMesh);
+    const FString FloorMeshPath = FloorMesh && FloorMesh->GetStaticMesh() ? FloorMesh->GetStaticMesh()->GetPathName() : FString();
+    TestEqual(TEXT("floor uses Engine Cube"), FloorMeshPath, FString(TEXT("/Engine/BasicShapes/Cube.Cube")));
+    const FBox FloorBounds = Floor ? Floor->GetComponentsBoundingBox(true) : FBox(ForceInit);
+    TestTrue(TEXT("floor top is at approximately Z=0"), FMath::IsNearlyZero(FloorBounds.Max.Z, 1.0f));
+
+    AActor* SunActor = EnvironmentActors.Num() > 1 ? EnvironmentActors[1] : nullptr;
+    ADirectionalLight* Sun = Cast<ADirectionalLight>(SunActor);
+    UDirectionalLightComponent* SunComponent = Sun ? Sun->GetComponent() : nullptr;
+    TestNotNull(TEXT("directional light component exists"), SunComponent);
+    if (SunComponent)
+    {
+        TestTrue(TEXT("directional light affects the world"), SunComponent->bAffectsWorld);
+        TestTrue(TEXT("directional light casts shadows"), SunComponent->CastShadows);
+        TestTrue(TEXT("directional light is an atmosphere sun light"), SunComponent->bAtmosphereSunLight);
+        TestTrue(TEXT("directional light intensity is positive"), SunComponent->Intensity > 0.0f);
+    }
+
+    AActor* SkyLightActor = EnvironmentActors.Num() > 2 ? EnvironmentActors[2] : nullptr;
+    ASkyLight* SkyLight = Cast<ASkyLight>(SkyLightActor);
+    USkyLightComponent* SkyLightComponent = SkyLight ? SkyLight->GetLightComponent() : nullptr;
+    TestNotNull(TEXT("sky light component exists"), SkyLightComponent);
+    if (SkyLightComponent)
+    {
+        TestTrue(TEXT("sky light affects the world"), SkyLightComponent->bAffectsWorld);
+        TestTrue(TEXT("sky light real-time capture is enabled"), SkyLightComponent->IsRealTimeCaptureEnabled());
+        TestTrue(TEXT("sky light intensity is positive"), SkyLightComponent->Intensity > 0.0f);
+    }
+
+    AActor* SkyAtmosphereActor = EnvironmentActors.Num() > 3 ? EnvironmentActors[3] : nullptr;
+    ASkyAtmosphere* SkyAtmosphere = Cast<ASkyAtmosphere>(SkyAtmosphereActor);
+    TestNotNull(TEXT("sky atmosphere component exists"), SkyAtmosphere ? SkyAtmosphere->GetComponent() : nullptr);
+
+    TMap<FString, FString> ExpectedPointMeshes = {
+        {TEXT("Loot Crate A"), TEXT("/Engine/BasicShapes/Cube.Cube")},
+        {TEXT("Enemy Spawn North"), TEXT("/Engine/BasicShapes/Cylinder.Cylinder")},
+        {TEXT("Quest Marker — Gate"), TEXT("/Engine/BasicShapes/Cone.Cone")},
+        {TEXT("Navigation Point — East"), TEXT("/Engine/BasicShapes/Sphere.Sphere")},
+        {TEXT("Far Distance Actor"), TEXT("/Engine/BasicShapes/Cube.Cube")},
+        {TEXT("Filtered Debug Actor"), TEXT("/Engine/BasicShapes/Sphere.Sphere")}
+    };
+    TSet<FString> ShapePaths;
+    int32 FixtureCount = 0;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        AActor* Actor = *It;
+        if (!Actor || (!Actor->IsA<AActorMetadataOverlayDemoActor>() && !Actor->IsA<AActorMetadataOverlayDemoZone>()))
+        {
+            continue;
+        }
+
+        ++FixtureCount;
+        TestTrue(FString::Printf(TEXT("floor covers fixture %s on X/Y"), *Actor->GetActorLabel()),
+            FloorBounds.Min.X <= Actor->GetActorLocation().X && FloorBounds.Max.X >= Actor->GetActorLocation().X &&
+            FloorBounds.Min.Y <= Actor->GetActorLocation().Y && FloorBounds.Max.Y >= Actor->GetActorLocation().Y);
+        if (AActorMetadataOverlayDemoActor* PointActor = Cast<AActorMetadataOverlayDemoActor>(Actor))
+        {
+            const FString* ExpectedMeshPath = ExpectedPointMeshes.Find(Actor->GetActorLabel());
+            TestNotNull(FString::Printf(TEXT("visual mesh spec exists for %s"), *Actor->GetActorLabel()), ExpectedMeshPath);
+            if (ExpectedMeshPath && PointActor->Mesh)
+            {
+                const FString ActualMeshPath = PointActor->Mesh->GetStaticMesh() ? PointActor->Mesh->GetStaticMesh()->GetPathName() : FString();
+                TestEqual(FString::Printf(TEXT("visual mesh assignment for %s"), *Actor->GetActorLabel()), ActualMeshPath, *ExpectedMeshPath);
+                TestTrue(FString::Printf(TEXT("visual mesh for %s is an Engine Basic Shape"), *Actor->GetActorLabel()), ActualMeshPath.StartsWith(TEXT("/Engine/BasicShapes/")));
+                ShapePaths.Add(ActualMeshPath);
+            }
+            else
+            {
+                TestNotNull(FString::Printf(TEXT("static mesh component for %s"), *Actor->GetActorLabel()), PointActor->Mesh.Get());
+            }
+        }
+        else if (AActorMetadataOverlayDemoZone* ZoneActor = Cast<AActorMetadataOverlayDemoZone>(Actor))
+        {
+            TestNotNull(TEXT("audio zone keeps its Box component"), ZoneActor->Box.Get());
+        }
+    }
+    TestEqual(TEXT("normal actor iteration finds seven fixtures"), FixtureCount, 7);
+    TestTrue(TEXT("at least four Basic Shape meshes are used"), ShapePaths.Num() >= 4);
+
+    const FString UserConfig = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Config/DefaultEditorPerProjectUserSettings.ini"));
+    TestTrue(TEXT("visual environment does not change Display Mode"), UserConfig.Contains(TEXT("DisplayMode=Selected")));
+    TestFalse(TEXT("visual environment has no Python startup hook"), FPaths::FileExists(FPaths::ProjectDir() / TEXT("Content/Python/init_unreal.py")));
     return true;
 }
 

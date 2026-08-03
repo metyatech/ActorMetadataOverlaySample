@@ -39,6 +39,37 @@ if (-not $spec.editorRegion -or $spec.editorRegion.actorClass -ne 'ALocationVolu
     throw 'demo-spec.json editorRegion is missing or does not cover all seven fixture actors.'
 }
 
+$visualEnvironment = $spec.visualEnvironment
+if (-not $visualEnvironment -or $visualEnvironment.style -ne 'neutral-outdoor-test-lane' -or $visualEnvironment.folder -ne 'ActorMetadataOverlayDemo/Environment') {
+    throw 'demo-spec.json visualEnvironment is missing or has an unexpected style/folder.'
+}
+$environmentEntries = @($visualEnvironment.floor, $visualEnvironment.directionalLight, $visualEnvironment.skyLight, $visualEnvironment.skyAtmosphere)
+if ($environmentEntries.Count -ne 4) {
+    throw 'demo-spec.json visualEnvironment must contain exactly four environment actors.'
+}
+$environmentNames = @($environmentEntries | ForEach-Object { $_.actorName })
+if (($environmentNames | Select-Object -Unique).Count -ne 4 -or $environmentNames -contains $null -or $environmentNames -contains '') {
+    throw 'visualEnvironment actor names must be present and unique.'
+}
+if ($visualEnvironment.floor.actorClass -ne 'AStaticMeshActor' -or $visualEnvironment.floor.mesh -ne '/Engine/BasicShapes/Cube.Cube') {
+    throw 'visualEnvironment floor must use AStaticMeshActor and Engine Cube.'
+}
+if ($visualEnvironment.directionalLight.actorClass -ne 'ADirectionalLight' -or $visualEnvironment.skyLight.actorClass -ne 'ASkyLight' -or $visualEnvironment.skyAtmosphere.actorClass -ne 'ASkyAtmosphere') {
+    throw 'visualEnvironment must use the standard directional light, sky light, and sky atmosphere actors.'
+}
+$pointActors = @($spec.actors | Where-Object { $_.actorClass -eq 'AActorMetadataOverlayDemoActor' })
+if ($pointActors.Count -ne 6) {
+    throw 'demo-spec.json must contain six point fixture actors.'
+}
+$invalidVisualMeshes = @($pointActors | Where-Object { [string]::IsNullOrWhiteSpace([string]$_.visualMesh) -or $_.visualMesh -notlike '/Engine/BasicShapes/*' })
+if ($invalidVisualMeshes.Count -gt 0) {
+    throw 'Every point fixture must have a visualMesh under /Engine/BasicShapes/.'
+}
+$visualMeshPaths = @($pointActors | ForEach-Object { $_.visualMesh })
+if (($visualMeshPaths | Where-Object { $_ -notlike '/Engine/BasicShapes/*' }).Count -gt 0) {
+    throw 'A visualMesh outside Engine Basic Shapes was found.'
+}
+
 $projectPath = Join-Path $sampleRoot 'ActorMetadataSample.uproject'
 $project = Get-Content -LiteralPath $projectPath -Raw | ConvertFrom-Json
 $projectModule = @($project.Modules | Where-Object { $_.Name -eq 'ActorMetadataSample' })
@@ -210,6 +241,16 @@ $displayModeAssignments = rg -n --hidden -S 'DisplayMode\s*=' (Join-Path $sample
 if ($LASTEXITCODE -eq 0 -and $displayModeAssignments) {
     throw 'Sample scripts contain a DisplayMode assignment.'
 }
+$captureScriptText = Get-Content -LiteralPath (Join-Path $sampleRoot 'Scripts/Capture/Apply-DemoSpec.py') -Raw
+if ($captureScriptText.Contains('visualEnvironment') -or $captureScriptText.Contains('visualMesh')) {
+    throw 'Capture Apply script must not apply the public visual environment or fixture visual meshes.'
+}
+if (-not $scriptText.Contains('ensure_visual_environment') -or -not $scriptText.Contains('AMO_Environment_') -or -not $scriptText.Contains('assign_basic_shape_mesh')) {
+    throw 'Build-DemoMap.py does not contain the required environment regeneration and Basic Shape assignment paths.'
+}
+if ($scriptText.Contains('fallback') -and $scriptText.Contains('visualMesh')) {
+    throw 'Build-DemoMap.py must stop on an invalid visual mesh instead of silently falling back.'
+}
 $regionModulePath = Join-Path $sampleRoot 'Plugins/ActorMetadataOverlayDemoFixtures/Source/ActorMetadataOverlayDemoFixturesEditor/Private/ActorMetadataOverlayDemoFixturesEditor.cpp'
 $regionModuleText = Get-Content -LiteralPath $regionModulePath -Raw
 if (-not $regionModuleText.Contains('FEditorDelegates::OnMapOpened') -or -not $regionModuleText.Contains('ALocationVolume') -or -not $regionModuleText.Contains('AMO_DemoRegion')) {
@@ -235,7 +276,7 @@ if ([regex]::IsMatch($regionModuleText, '(?s)void\s+HandleMapOpened\s*\([^)]*\)\
 if (-not $regionModuleText.Contains('World->WorldType != EWorldType::Editor') -or -not $regionModuleText.Contains('World->GetOutermost()->GetName() != DemoMapPackage')) {
     throw 'The Fixture Editor module does not enforce the exact Editor world and Overview Map package checks.'
 }
-if (-not [regex]::IsMatch($regionModuleText, '(?s)if\s*\(DemoRegion->IsLoaded\(\)\).*?DemoRegion->Load\(\).*?DemoRegion->IsLoaded\(\)')) {
+if (-not [regex]::IsMatch($regionModuleText, '(?s)if\s*\(!DemoRegion->IsLoaded\(\)\).*?DemoRegion->Load\(\).*?if\s*\(!DemoRegion->IsLoaded\(\)\)')) {
     throw 'The Fixture Editor module does not guard duplicate loads and confirm IsLoaded after Load.'
 }
 if ($regionModuleText.Contains('LogTemp') -or -not $regionModuleText.Contains('DEFINE_LOG_CATEGORY_STATIC(LogActorMetadataOverlayDemoFixturesEditor')) {
@@ -244,13 +285,16 @@ if ($regionModuleText.Contains('LogTemp') -or -not $regionModuleText.Contains('D
 if (-not $regionModuleText.Contains('bRegionWarningIssued') -or -not [regex]::IsMatch($regionModuleText, '(?s)UE_LOG\(LogActorMetadataOverlayDemoFixturesEditor,\s*Warning')) {
     throw 'The Fixture Editor module must issue a bounded module-specific warning for missing or duplicate regions.'
 }
+if (-not $regionModuleText.Contains('SetIsTemporarilyHiddenInEditor(true)') -or -not $regionModuleText.Contains('IsTemporarilyHiddenInEditor()')) {
+    throw 'The Fixture Editor module must temporarily hide the loaded demo region using the editor-only API.'
+}
 
 $testSourcePath = Join-Path $sampleRoot 'Plugins/ActorMetadataOverlayDemoFixtures/Source/ActorMetadataOverlayDemoFixturesEditor/Private/ActorMetadataOverlayDemoTests.cpp'
 $testSourceText = Get-Content -LiteralPath $testSourcePath -Raw
 $automationTestMatches = [regex]::Matches($testSourceText, '(?s)IMPLEMENT_(?:SIMPLE|CUSTOM_COMPLEX|COMPLEX)_AUTOMATION_TEST\s*\([^,]+,\s*"([^"]+)"')
 $automationTestPaths = @($automationTestMatches | ForEach-Object { $_.Groups[1].Value })
-if ($automationTestPaths.Count -ne 8 -or 'ActorMetadataOverlay.Sample.RegionReopen' -notin $automationTestPaths) {
-    throw "Expected exactly eight Sample automation tests including ActorMetadataOverlay.Sample.RegionReopen; found $($automationTestPaths.Count): $($automationTestPaths -join ', ')."
+if ($automationTestPaths.Count -ne 9 -or 'ActorMetadataOverlay.Sample.RegionReopen' -notin $automationTestPaths -or 'ActorMetadataOverlay.Sample.VisualEnvironment' -notin $automationTestPaths) {
+    throw "Expected exactly nine Sample automation tests including VisualEnvironment and RegionReopen; found $($automationTestPaths.Count): $($automationTestPaths -join ', ')."
 }
 $regionReopenSectionMatch = [regex]::Match($testSourceText, '(?s)IMPLEMENT_SIMPLE_AUTOMATION_TEST\(FActorMetadataSampleRegionReopenTest.*\z')
 if (-not $regionReopenSectionMatch.Success) {
@@ -259,6 +303,20 @@ if (-not $regionReopenSectionMatch.Success) {
 $regionReopenSection = $regionReopenSectionMatch.Value
 if ($regionReopenSection.Contains('ForEachActorWithLoading') -or $regionReopenSection.Contains('DemoRegion->Load') -or $regionReopenSection.Contains('ALocationVolume::Load')) {
     throw 'RegionReopen must not explicitly load the region or fixture actors from the test.'
+}
+$visualEnvironmentSectionMatch = [regex]::Match($testSourceText, '(?s)IMPLEMENT_SIMPLE_AUTOMATION_TEST\(FActorMetadataSampleVisualEnvironmentTest.*?IMPLEMENT_SIMPLE_AUTOMATION_TEST\(FActorMetadataSampleRegionReopenTest')
+if (-not $visualEnvironmentSectionMatch.Success) {
+    throw 'The VisualEnvironment automation test source is missing.'
+}
+if ($visualEnvironmentSectionMatch.Value.Contains('ForEachActorWithLoading') -or $visualEnvironmentSectionMatch.Value.Contains('DemoRegion->Load') -or $visualEnvironmentSectionMatch.Value.Contains('ALocationVolume::Load')) {
+    throw 'VisualEnvironment must use normal actor iteration and must not explicitly load the region or fixture actors.'
+}
+$trackedMaterialTextureAssets = @(git -C $sampleRoot ls-files -- 'Content/**' | Where-Object { $_ -match '(?i)(\.umaterial|\.utexture|Material|Texture).*(\.uasset|\.umap)$' })
+if ($LASTEXITCODE -ne 0) {
+    throw 'Unable to inspect tracked Sample Content assets.'
+}
+if ($trackedMaterialTextureAssets.Count -gt 0) {
+    throw "Sample must not add Material or Texture assets: $($trackedMaterialTextureAssets -join ', ')"
 }
 
 $mapPath = Join-Path $sampleRoot 'Content\ActorMetadataOverlayDemo\Maps\ActorMetadataOverlayOverview.umap'
@@ -301,7 +359,17 @@ $result = [pscustomobject]@{
     AutomationTests = [pscustomobject]@{
         Count = $automationTestPaths.Count
         Paths = $automationTestPaths
+        VisualEnvironment = $true
         RegionReopen = $true
+    }
+    VisualEnvironment = [pscustomobject]@{
+        Style = $visualEnvironment.style
+        Folder = $visualEnvironment.folder
+        ActorNames = $environmentNames
+        FloorMesh = $visualEnvironment.floor.mesh
+        PointVisualMeshes = $visualMeshPaths
+        CaptureApplyExcludesVisuals = $true
+        NewMaterialTextureAssets = 0
     }
 }
 if (-not $OutputPath) {

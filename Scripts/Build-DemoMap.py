@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 
 import unreal
 
@@ -11,6 +12,13 @@ FIXTURE_MODULE = "ActorMetadataOverlayDemoFixtures"
 ACTOR_CLASSES = {
     "AActorMetadataOverlayDemoActor": "/Script/ActorMetadataOverlayDemoFixtures.ActorMetadataOverlayDemoActor",
     "AActorMetadataOverlayDemoZone": "/Script/ActorMetadataOverlayDemoFixtures.ActorMetadataOverlayDemoZone",
+}
+ENGINE_BASIC_SHAPES_PREFIX = "/Engine/BasicShapes/"
+UNREAL_PYTHON_CLASS_NAMES = {
+    "AStaticMeshActor": "StaticMeshActor",
+    "ADirectionalLight": "DirectionalLight",
+    "ASkyLight": "SkyLight",
+    "ASkyAtmosphere": "SkyAtmosphere",
 }
 
 
@@ -28,6 +36,42 @@ def set_property(actor, name, value):
         actor.set_editor_property(name, value)
     except Exception as error:
         raise RuntimeError("Could not set {} on {}: {}".format(name, actor.get_name(), error))
+
+
+def resolve_unreal_class(class_name):
+    python_class_name = UNREAL_PYTHON_CLASS_NAMES.get(class_name, class_name)
+    actor_class = getattr(unreal, python_class_name, None)
+    if actor_class is None:
+        raise RuntimeError("The installed engine does not expose Unreal class {} (Python API name {})".format(
+            class_name, python_class_name))
+    return actor_class
+
+
+def load_basic_shape_mesh(mesh_path):
+    if not mesh_path.startswith(ENGINE_BASIC_SHAPES_PREFIX):
+        raise RuntimeError("Visual mesh must be under /Engine/BasicShapes/: {}".format(mesh_path))
+    mesh = unreal.EditorAssetLibrary.load_asset(mesh_path)
+    if mesh is None or not isinstance(mesh, unreal.StaticMesh):
+        raise RuntimeError("Could not load Engine Basic Shape mesh {}".format(mesh_path))
+    return mesh
+
+
+def get_exact_component(actor, component_class, description):
+    components = actor.get_components_by_class(component_class)
+    if len(components) != 1:
+        raise RuntimeError("{} must have exactly one {} component, found {}".format(
+            description, component_class.__name__, len(components)))
+    return components[0]
+
+
+def assign_basic_shape_mesh(actor, mesh_path, description):
+    component = get_exact_component(actor, unreal.StaticMeshComponent, description)
+    mesh = load_basic_shape_mesh(mesh_path)
+    component.set_static_mesh(mesh)
+    assigned_mesh = component.get_editor_property("static_mesh")
+    if assigned_mesh is None or assigned_mesh.get_path_name() != mesh_path:
+        raise RuntimeError("Could not assign Engine Basic Shape mesh {} to {}".format(mesh_path, description))
+    return component
 
 
 def ensure_data_layer_asset(asset_tools, name):
@@ -78,9 +122,19 @@ def get_current_world(level_subsystem):
 
 
 def clear_generated_actors(actor_subsystem):
-    for actor in list(actor_subsystem.get_all_level_actors()):
-        if (actor.get_name().startswith("AMO_") or actor.get_actor_label().startswith("Loot Crate")):
-            actor_subsystem.destroy_actor(actor)
+    destroyed_count = 0
+    for index, actor in enumerate(list(actor_subsystem.get_all_level_actors())):
+        actor_name = actor.get_name()
+        if actor_name.startswith("AMO_Environment_") or actor_name.startswith("AMO_") or actor.get_actor_label().startswith("Loot Crate"):
+            temporary_name = "__AMO_DELETE_{}_{}".format(actor_name, index)
+            actor.rename(temporary_name)
+            if not actor_subsystem.destroy_actor(actor):
+                raise RuntimeError("Could not remove generated actor {}".format(actor_name))
+            destroyed_count += 1
+    if destroyed_count:
+        # EditorActorSubsystem marks actors for deletion; force the documented
+        # UObject collection before recreating the same stable object names.
+        unreal.SystemLibrary.collect_garbage()
 
 
 def ensure_editor_region(actor_subsystem, region_spec):
@@ -118,22 +172,101 @@ def configure_actor(actor, entry, data_layer_instances):
         set_property(actor, property_name.lower(), property_value)
     actor.set_gameplay_tag_names([unreal.Name(tag) for tag in entry.get("gameplayTags", [])])
 
+    visual_mesh = entry.get("visualMesh")
+    if visual_mesh:
+        assign_basic_shape_mesh(actor, visual_mesh, entry["actorName"])
+
     data_layer_subsystem = unreal.get_editor_subsystem(unreal.DataLayerEditorSubsystem)
     for layer_name in entry.get("dataLayers", []):
         if not data_layer_subsystem.add_actor_to_data_layer(actor, data_layer_instances[layer_name]):
             raise RuntimeError("Could not add {} to Data Layer {}".format(actor.get_name(), layer_name))
 
 
-def main():
-    spec = read_spec()
-    level_subsystem = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
-    if unreal.EditorAssetLibrary.does_asset_exist(MAP_PATH):
-        if not level_subsystem.load_level(MAP_PATH):
-            raise RuntimeError("Could not load existing overview map")
-    elif not level_subsystem.new_level(MAP_PATH, True):
-        raise RuntimeError("Could not create partitioned overview map")
+def spawn_environment_actor(actor_subsystem, entry):
+    actor_class = resolve_unreal_class(entry["actorClass"])
+    actor = actor_subsystem.spawn_actor_from_class(
+        actor_class,
+        unreal.Vector(*entry["location"]),
+        unreal.Rotator(*entry["rotation"]),
+    )
+    if actor is None:
+        raise RuntimeError("Could not spawn environment actor {}".format(entry["actorName"]))
+    actor.rename(entry["actorName"])
+    if actor.get_name() != entry["actorName"]:
+        raise RuntimeError("Environment actor name did not resolve to {} (got {})".format(
+            entry["actorName"], actor.get_name()))
+    actor.set_actor_label(entry["actorLabel"])
+    actor.set_folder_path(entry["folder"])
+    return actor
 
-    actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+
+def configure_floor(actor, floor_spec):
+    actor.set_actor_scale3d(unreal.Vector(*floor_spec["scale"]))
+    assign_basic_shape_mesh(actor, floor_spec["mesh"], floor_spec["actorName"])
+
+
+def configure_directional_light(actor, light_spec):
+    component = get_exact_component(actor, unreal.DirectionalLightComponent, light_spec["actorName"])
+    component.set_editor_property("intensity", float(light_spec["intensity"]))
+    component.set_editor_property("affects_world", True)
+    component.set_editor_property("cast_shadows", bool(light_spec["castShadows"]))
+    component.set_editor_property("mobility", unreal.ComponentMobility.STATIONARY)
+    component.set_atmosphere_sun_light(bool(light_spec["atmosphereSunLight"]))
+
+
+def get_captured_scene_source_type():
+    source_type = getattr(unreal, "SkyLightSourceType", None)
+    if source_type is None:
+        raise RuntimeError("The installed engine does not expose SkyLightSourceType")
+    captured_scene = getattr(source_type, "SLS_CAPTURED_SCENE", None)
+    if captured_scene is None:
+        captured_scene = getattr(source_type, "CAPTURED_SCENE", None)
+    if captured_scene is None:
+        raise RuntimeError("The installed engine does not expose the captured-scene Sky Light source type")
+    return captured_scene
+
+
+def configure_sky_light(actor, light_spec):
+    component = get_exact_component(actor, unreal.SkyLightComponent, light_spec["actorName"])
+    component.set_editor_property("intensity", float(light_spec["intensity"]))
+    component.set_editor_property("affects_world", True)
+    component.set_editor_property("mobility", unreal.ComponentMobility.MOVABLE)
+    component.set_editor_property("source_type", get_captured_scene_source_type())
+    component.set_real_time_capture(bool(light_spec["realTimeCapture"]))
+
+
+def configure_sky_atmosphere(actor, atmosphere_spec):
+    component = get_exact_component(actor, unreal.SkyAtmosphereComponent, atmosphere_spec["actorName"])
+    if component is None:
+        raise RuntimeError("Could not resolve Sky Atmosphere component on {}".format(atmosphere_spec["actorName"]))
+    actor.set_actor_scale3d(unreal.Vector(*atmosphere_spec["scale"]))
+
+
+def ensure_visual_environment(actor_subsystem, environment_spec):
+    folder = environment_spec["folder"]
+    floor_spec = dict(environment_spec["floor"])
+    floor_spec["folder"] = folder
+    sun_spec = dict(environment_spec["directionalLight"])
+    sun_spec["folder"] = folder
+    sky_light_spec = dict(environment_spec["skyLight"])
+    sky_light_spec["folder"] = folder
+    sky_atmosphere_spec = dict(environment_spec["skyAtmosphere"])
+    sky_atmosphere_spec["folder"] = folder
+
+    floor = spawn_environment_actor(actor_subsystem, floor_spec)
+    configure_floor(floor, floor_spec)
+
+    sun = spawn_environment_actor(actor_subsystem, sun_spec)
+    configure_directional_light(sun, sun_spec)
+
+    sky_light = spawn_environment_actor(actor_subsystem, sky_light_spec)
+    configure_sky_light(sky_light, sky_light_spec)
+
+    sky_atmosphere = spawn_environment_actor(actor_subsystem, sky_atmosphere_spec)
+    configure_sky_atmosphere(sky_atmosphere, sky_atmosphere_spec)
+
+
+def regenerate_map(spec, level_subsystem, actor_subsystem):
     clear_generated_actors(actor_subsystem)
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
     data_layer_assets = {
@@ -157,10 +290,54 @@ def main():
         configure_actor(actor, entry, data_layer_instances)
 
     ensure_editor_region(actor_subsystem, spec["editorRegion"])
+    ensure_visual_environment(actor_subsystem, spec["visualEnvironment"])
 
     if not level_subsystem.save_current_level():
         raise RuntimeError("Could not save overview map")
     unreal.log("Actor Metadata Overlay sample map generated: {}".format(MAP_PATH))
+
+
+def wait_for_existing_generated_actors(spec, level_subsystem, actor_subsystem):
+    required_names = {entry["actorName"] for entry in spec["actors"]}
+    required_names.add(spec["editorRegion"]["actorName"])
+    state = {"handle": None, "started": time.monotonic(), "attempts": 0}
+
+    def on_post_tick(_delta_seconds):
+        state["attempts"] += 1
+        current_names = {actor.get_name() for actor in actor_subsystem.get_all_level_actors()}
+        if not required_names.issubset(current_names):
+            if time.monotonic() - state["started"] > 60.0:
+                unreal.unregister_slate_post_tick_callback(state["handle"])
+                missing = sorted(required_names - current_names)
+                raise RuntimeError("Timed out waiting for the existing World Partition demo region actors: {}".format(
+                    ", ".join(missing)))
+            return
+
+        unreal.unregister_slate_post_tick_callback(state["handle"])
+        unreal.log("Existing demo actors ready after {} post-tick checks".format(state["attempts"]))
+        regenerate_map(spec, level_subsystem, actor_subsystem)
+
+    state["handle"] = unreal.register_slate_post_tick_callback(on_post_tick)
+
+
+def main():
+    spec = read_spec()
+    level_subsystem = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+    map_exists = unreal.EditorAssetLibrary.does_asset_exist(MAP_PATH)
+    if map_exists:
+        if not level_subsystem.load_level(MAP_PATH):
+            raise RuntimeError("Could not load existing overview map")
+    elif not level_subsystem.new_level(MAP_PATH, True):
+        raise RuntimeError("Could not create partitioned overview map")
+
+    actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    if map_exists:
+        # Existing World Partition actors arrive on a later editor tick after
+        # ALocationVolume::Load; wait for that state transition before deleting
+        # and recreating stable actor names.
+        wait_for_existing_generated_actors(spec, level_subsystem, actor_subsystem)
+    else:
+        regenerate_map(spec, level_subsystem, actor_subsystem)
 
 
 if __name__ == "__main__":

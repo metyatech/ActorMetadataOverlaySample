@@ -44,6 +44,8 @@ The Unreal project name is `ActorMetadataSample` (19 characters); the public rep
 
 The initial display mode is the product default, `Selected Actors`. The sample contains no startup script that changes it.
 
+The overview map is a bright, neutral outdoor test lane made only from Unreal Engine standard actors and Basic Shapes. It is intended to be used directly in `Lit` view: a floor, sun, sky light, and sky atmosphere keep the fixture silhouettes readable, while the point fixtures use distinct shapes. `AMO_DemoRegion` still loads the World Partition demo area, but the editor-only region wireframe is temporarily hidden in the normal viewport. This visual environment is sample-only and is never synchronized to the Capture Host or the paid plugin.
+
 ## Try Selected / All / Off
 
 Use the viewport Show menu to switch between `Selected Actors`, `All Matching Actors`, and `Off`. Keep Game View off to see editor overlays. Game View, PIE, and SIE are expected to hide the editor-only overlay.

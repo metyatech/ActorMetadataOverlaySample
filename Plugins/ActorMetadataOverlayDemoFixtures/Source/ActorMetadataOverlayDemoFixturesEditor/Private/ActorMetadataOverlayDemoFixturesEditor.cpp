@@ -77,13 +77,23 @@ private:
             WarnRegionProblem(TEXT("multiple actors with the same name were found"));
             return false;
         }
-        if (DemoRegion->IsLoaded())
+        if (!DemoRegion->IsLoaded())
         {
-            return true;
+            DemoRegion->Load();
+            if (!DemoRegion->IsLoaded())
+            {
+                WarnRegionProblem(TEXT("the actor did not become loaded"));
+                return false;
+            }
         }
 
-        DemoRegion->Load();
-        return DemoRegion->IsLoaded();
+        DemoRegion->SetIsTemporarilyHiddenInEditor(true);
+        if (!DemoRegion->IsTemporarilyHiddenInEditor())
+        {
+            WarnRegionProblem(TEXT("the actor could not be temporarily hidden in the editor"));
+            return false;
+        }
+        return true;
     }
 
     void WarnRegionProblem(const TCHAR* Reason)

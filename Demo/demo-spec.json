@@ -33,6 +33,7 @@
       "dataLayers": ["Gameplay", "Night"],
       "properties": {"State": "Ready", "Priority": 80, "Radius": 150.0, "Description": "Rare loot demonstration"},
       "sampleTransform": {"location": [0.0, 0.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "visualMesh": "/Engine/BasicShapes/Cube.Cube",
       "captureRole": "loot-main",
       "expectedOverlayLines": [
         "Loot Crate A",
@@ -56,6 +57,7 @@
       "dataLayers": ["Gameplay"],
       "properties": {"State": "Active", "Priority": 60, "Radius": 100.0, "Description": "North enemy spawn"},
       "sampleTransform": {"location": [600.0, 0.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "visualMesh": "/Engine/BasicShapes/Cylinder.Cylinder",
       "captureRole": "spawn-north",
       "expectedOverlayLines": []
     },
@@ -70,6 +72,7 @@
       "dataLayers": ["Gameplay"],
       "properties": {"State": "Available", "Priority": 90, "Radius": 100.0, "Description": "Main quest gate"},
       "sampleTransform": {"location": [-500.0, 300.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "visualMesh": "/Engine/BasicShapes/Cone.Cone",
       "captureRole": "quest-gate",
       "expectedOverlayLines": []
     },
@@ -99,6 +102,7 @@
       "dataLayers": [],
       "properties": {"State": "Ready", "Priority": 20, "Radius": 50.0, "Description": "Navigation reference"},
       "sampleTransform": {"location": [500.0, -600.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "visualMesh": "/Engine/BasicShapes/Sphere.Sphere",
       "captureRole": "navigation-east",
       "expectedOverlayLines": []
     },
@@ -113,6 +117,7 @@
       "dataLayers": ["Gameplay"],
       "properties": {"State": "Far", "Priority": 10, "Radius": 25.0, "Description": "Placed beyond the default distance"},
       "sampleTransform": {"location": [20000.0, 0.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "visualMesh": "/Engine/BasicShapes/Cube.Cube",
       "captureRole": "far-a",
       "expectedOverlayLines": []
     },
@@ -127,10 +132,53 @@
       "dataLayers": ["Gameplay"],
       "properties": {"State": "Hidden", "Priority": 1, "Radius": 10.0, "Description": "Excluded by the point rule"},
       "sampleTransform": {"location": [-800.0, -400.0, 50.0], "rotation": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+      "visualMesh": "/Engine/BasicShapes/Sphere.Sphere",
       "captureRole": "filtered",
       "expectedOverlayLines": []
     }
   ],
+  "visualEnvironment": {
+    "style": "neutral-outdoor-test-lane",
+    "folder": "ActorMetadataOverlayDemo/Environment",
+    "floor": {
+      "actorName": "AMO_Environment_Floor",
+      "actorLabel": "Demo Floor",
+      "actorClass": "AStaticMeshActor",
+      "mesh": "/Engine/BasicShapes/Cube.Cube",
+      "location": [10000.0, 0.0, -50.0],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": [240.0, 40.0, 1.0]
+    },
+    "directionalLight": {
+      "actorName": "AMO_Environment_Sun",
+      "actorLabel": "Demo Sun Light",
+      "actorClass": "ADirectionalLight",
+      "location": [0.0, 0.0, 1000.0],
+      "rotation": [-35.0, -45.0, 0.0],
+      "intensity": 10.0,
+      "atmosphereSunLight": true,
+      "castShadows": true,
+      "mobility": "Stationary"
+    },
+    "skyLight": {
+      "actorName": "AMO_Environment_SkyLight",
+      "actorLabel": "Demo Sky Light",
+      "actorClass": "ASkyLight",
+      "location": [0.0, 0.0, 1000.0],
+      "rotation": [0.0, 0.0, 0.0],
+      "intensity": 1.0,
+      "realTimeCapture": true,
+      "mobility": "Movable"
+    },
+    "skyAtmosphere": {
+      "actorName": "AMO_Environment_SkyAtmosphere",
+      "actorLabel": "Demo Sky Atmosphere",
+      "actorClass": "ASkyAtmosphere",
+      "location": [0.0, 0.0, 0.0],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": [1.0, 1.0, 1.0]
+    }
+  },
   "rules": [
     {
       "name": "Point Actors",
