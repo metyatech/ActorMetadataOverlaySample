@@ -17,6 +17,7 @@ public class ActorMetadataOverlayDemoFixturesEditor : ModuleRules
         {
             "EditorSubsystem",
             "UnrealEd",
+            "LevelEditor",
             "DataLayerEditor",
             "Json",
             "Slate",

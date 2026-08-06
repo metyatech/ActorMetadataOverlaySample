@@ -38,6 +38,19 @@ if ($spec.map -ne '/Game/ActorMetadataOverlayDemo/Maps/ActorMetadataOverlayOverv
 if (-not $spec.editorRegion -or $spec.editorRegion.actorClass -ne 'ALocationVolume' -or $spec.editorRegion.actorName -ne 'AMO_DemoRegion' -or $spec.editorRegion.actorLabel -ne 'Actor Metadata Overlay Demo Region' -or $spec.editorRegion.loadsActorIds.Count -ne 7) {
     throw 'demo-spec.json editorRegion is missing or does not cover all seven fixture actors.'
 }
+$overviewFov = $spec.overviewCamera.fov
+if ($overviewFov -isnot [double] -or [double]::IsNaN($overviewFov) -or [double]::IsInfinity($overviewFov) -or
+    $overviewFov -ne 50.0 -or $overviewFov -lt 35.0 -or $overviewFov -gt 80.0) {
+    throw 'demo-spec.json overviewCamera.fov must be the finite numeric value 50 within the supported [35,80] range.'
+}
+$lootExpectedOverlayLines = @($spec.actors[0].expectedOverlayLines)
+if ('Layer: Gameplay, Night' -notin $lootExpectedOverlayLines) {
+    throw 'Loot Crate A expectedOverlayLines must contain the exact user-facing Data Layer line: Layer: Gameplay, Night.'
+}
+$specText = Get-Content -LiteralPath (Join-Path $sampleRoot 'Demo/demo-spec.json') -Raw
+if ($specText -match 'DataLayer_[0-9A-Fa-f]{32}') {
+    throw 'demo-spec.json must not contain a generated Data Layer instance identifier.'
+}
 
 $visualEnvironment = $spec.visualEnvironment
 if (-not $visualEnvironment -or $visualEnvironment.style -ne 'polished-technical-showcase' -or $visualEnvironment.folder -ne 'ActorMetadataOverlayDemo/Environment') {
@@ -351,6 +364,7 @@ $expectedPluginEngineVersion = if ($EngineVersion) { "$EngineVersion.0" } else {
 $actualPluginEngineVersion = $null
 $localCopyMarkerValid = $false
 $localPluginTracked = ($paidPluginTracked.Count -gt 0)
+$pluginAutomationTestPaths = @()
 if ($EngineVersion -and $localPluginPresent) {
     $localDescriptorPath = Join-Path $localPluginRoot 'EditorActorTagDisplay.uplugin'
     if (-not (Test-Path -LiteralPath $localDescriptorPath)) {
@@ -378,6 +392,17 @@ if ($EngineVersion -and $localPluginPresent) {
     }
     if ([string]::IsNullOrWhiteSpace([string]$localMarker.sourceDescriptorSha256)) {
         throw 'The local copy marker has an empty sourceDescriptorSha256. Run Setup-Local.ps1 again with -EngineVersion 5.6 -Build.'
+    }
+
+    $pluginTestSourcePath = Join-Path $localPluginRoot 'Source/EditorActorTagDisplay/Private/Tests/EditorActorTagDisplayTests.cpp'
+    if (-not (Test-Path -LiteralPath $pluginTestSourcePath)) {
+        throw 'The local Actor Metadata Overlay copy is missing its Automation test source.'
+    }
+    $pluginTestSource = Get-Content -LiteralPath $pluginTestSourcePath -Raw
+    $pluginAutomationTests = [regex]::Matches($pluginTestSource, '(?s)IMPLEMENT_(?:SIMPLE|CUSTOM_COMPLEX|COMPLEX)_AUTOMATION_TEST\s*\([^,]+,\s*"([^"]+)"')
+    $pluginAutomationTestPaths = @($pluginAutomationTests | ForEach-Object { $_.Groups[1].Value })
+    if ($pluginAutomationTestPaths.Count -ne 6 -or 'EditorActorTagDisplay.DataLayerFormatting' -notin $pluginAutomationTestPaths) {
+        throw "Expected exactly six Plugin Automation tests including DataLayerFormatting; found $($pluginAutomationTestPaths.Count): $($pluginAutomationTestPaths -join ', ')."
     }
 
     $forbiddenLocalDirectories = @()
@@ -498,6 +523,42 @@ if (-not $regionModuleText.Contains('bRegionWarningIssued') -or -not [regex]::Is
 if (-not $regionModuleText.Contains('SetIsTemporarilyHiddenInEditor(true)') -or -not $regionModuleText.Contains('IsTemporarilyHiddenInEditor()')) {
     throw 'The Fixture Editor module must temporarily hide the loaded demo region using the editor-only API.'
 }
+if (-not $regionModuleText.Contains('TryGetNumberField(TEXT("fov")') -or
+    -not $regionModuleText.Contains('FMath::IsFinite(Fov)') -or
+    -not $regionModuleText.Contains('Fov < 35.0') -or
+    -not $regionModuleText.Contains('Fov > 80.0')) {
+    throw 'The Fixture Editor module must read overviewCamera.fov and reject non-finite or out-of-range values.'
+}
+if (-not $regionModuleText.Contains('FLevelEditorViewportClient') -or
+    -not $regionModuleText.Contains('IsPerspective()') -or
+    -not $regionModuleText.Contains('ViewFOV =') -or
+    $regionModuleText.Contains('FOVAngle =')) {
+    throw 'The Fixture Editor module must apply FOV only to transient Perspective Level Editor viewport state.'
+}
+if (-not $regionModuleText.Contains('ViewportClient->Invalidate') -or
+    -not $regionModuleText.Contains('Viewport->InvalidateDisplay()') -or
+    -not $regionModuleText.Contains('RedrawLevelEditingViewports')) {
+    throw 'The Fixture Editor module must invalidate and redraw the viewport after applying the initial FOV.'
+}
+$viewportVerificationIndex = $regionModuleText.IndexOf('bViewportStateMatches')
+$initialViewportCompletionIndex = $regionModuleText.IndexOf('bInitialViewportConfigured = true;')
+if ($viewportVerificationIndex -lt 0 -or $initialViewportCompletionIndex -le $viewportVerificationIndex) {
+    throw 'bInitialViewportConfigured must become true only after location, rotation, and FOV verification succeeds.'
+}
+if (-not $regionModuleText.Contains('FApp::IsUnattended()') -or
+    -not $regionModuleText.Contains('GIsAutomationTesting') -or
+    -not $regionModuleText.Contains('IsRunningCommandlet()') -or
+    -not $regionModuleText.Contains('if (bInitialViewportConfigured')) {
+    throw 'The initial viewport path must retain unattended, Automation, commandlet, and same-session reopen guards.'
+}
+if ($regionModuleText.Contains('GetMutableDefault<ULevelEditorViewportSettings>') -or
+    $regionModuleText.Contains(('Display' + 'Mode =')) -or
+    $regionModuleText.Contains('GConfig->Set')) {
+    throw 'The Fixture Editor module must not persist viewport preferences, display mode, or Config changes.'
+}
+if (Test-Path -LiteralPath (Join-Path $sampleRoot 'Content/Python/init_unreal.py')) {
+    throw 'The Sample must not use startup Python.'
+}
 
 $testSourcePath = Join-Path $sampleRoot 'Plugins/ActorMetadataOverlayDemoFixtures/Source/ActorMetadataOverlayDemoFixturesEditor/Private/ActorMetadataOverlayDemoTests.cpp'
 $testSourceText = Get-Content -LiteralPath $testSourcePath -Raw
@@ -571,6 +632,8 @@ $result = [pscustomobject]@{
     AutomationTests = [pscustomobject]@{
         Count = $automationTestPaths.Count
         Paths = $automationTestPaths
+        ExpectedPluginCount = 6
+        PluginPaths = $pluginAutomationTestPaths
         VisualEnvironment = $true
         RegionReopen = $true
     }
@@ -595,6 +658,11 @@ $result = [pscustomobject]@{
         Rotation = $spec.overviewCamera.rotation
         Fov = $spec.overviewCamera.fov
         SpatiallyLoaded = $false
+        InitialViewportReadsFov = $true
+        InitialViewportFiniteAndRangeValidation = $true
+        TransientPerspectiveViewFov = $true
+        InvalidateAndRedraw = $true
+        CompletionAfterFullStateVerification = $true
     }
     DistanceMarkers = @($spec.distanceLane.markers | ForEach-Object { [pscustomobject]@{ ActorName = $_.actorName; DistanceMeters = $_.distanceMeters } })
     CaptureViews = [pscustomobject]@{

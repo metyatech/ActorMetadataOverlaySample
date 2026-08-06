@@ -956,6 +956,11 @@ bool FActorMetadataSamplePresentationTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("show mode text is present"), SignageText.Contains(TEXT("Viewport Show  /  Actor Metadata Overlay")));
 
     const TSharedPtr<FJsonObject> CameraSpec = Spec->GetObjectField(TEXT("overviewCamera"));
+    const double OverviewCameraFov = CameraSpec->GetNumberField(TEXT("fov"));
+    TestTrue(TEXT("overview camera FOV is finite and exactly 50"),
+        FMath::IsFinite(OverviewCameraFov) && FMath::IsNearlyEqual(OverviewCameraFov, 50.0, UE_DOUBLE_SMALL_NUMBER));
+    TestTrue(TEXT("overview camera FOV is within the supported initial viewport range"),
+        OverviewCameraFov >= 35.0 && OverviewCameraFov <= 80.0);
     int32 CameraNameCount = 0;
     AActor* CameraActor = ActorMetadataOverlayDemoTests::FindActorByName(World, CameraSpec->GetStringField(TEXT("actorName")), CameraNameCount);
     TestEqual(TEXT("overview camera is unique"), CameraNameCount, 1);
@@ -1017,6 +1022,40 @@ bool FActorMetadataSamplePresentationTest::RunTest(const FString& Parameters)
             CaptureModuleSource.Contains(TEXT("FSlateApplication::Get().TakeScreenshot")));
         TestTrue(TEXT("real overlay capture is confined to ignored review evidence"),
             CaptureModuleSource.Contains(TEXT(".verification/user-review")));
+        TestTrue(TEXT("initial viewport reads overviewCamera.fov as a number"),
+            CaptureModuleSource.Contains(TEXT("TryGetNumberField(TEXT(\"fov\")")));
+        TestTrue(TEXT("initial viewport rejects a non-finite FOV"),
+            CaptureModuleSource.Contains(TEXT("FMath::IsFinite(Fov)")));
+        TestTrue(TEXT("initial viewport enforces the 35 to 80 degree FOV range"),
+            CaptureModuleSource.Contains(TEXT("Fov < 35.0")) && CaptureModuleSource.Contains(TEXT("Fov > 80.0")));
+        TestTrue(TEXT("initial viewport targets a Perspective Level Editor viewport"),
+            CaptureModuleSource.Contains(TEXT("FLevelEditorViewportClient")) &&
+            CaptureModuleSource.Contains(TEXT("IsPerspective()")));
+        TestTrue(TEXT("initial viewport applies transient ViewFOV rather than persistent FOVAngle"),
+            CaptureModuleSource.Contains(TEXT("ViewFOV =")) &&
+            !CaptureModuleSource.Contains(TEXT("FOVAngle =")));
+        TestTrue(TEXT("initial viewport invalidates and redraws after applying FOV"),
+            CaptureModuleSource.Contains(TEXT("ViewportClient->Invalidate")) &&
+            CaptureModuleSource.Contains(TEXT("RedrawLevelEditingViewports")));
+        TestTrue(TEXT("initial viewport verifies location rotation and FOV together"),
+            CaptureModuleSource.Contains(TEXT("bViewportStateMatches")) &&
+            CaptureModuleSource.Contains(TEXT("GetViewLocation")) &&
+            CaptureModuleSource.Contains(TEXT("GetViewRotation")) &&
+            CaptureModuleSource.Contains(TEXT("ViewFOV")));
+
+        const int32 ViewportStateVerification = CaptureModuleSource.Find(TEXT("bViewportStateMatches"));
+        const int32 InitialViewportCompletion = CaptureModuleSource.Find(TEXT("bInitialViewportConfigured = true;"));
+        TestTrue(TEXT("initial viewport completion is recorded only after full state verification"),
+            ViewportStateVerification != INDEX_NONE &&
+            InitialViewportCompletion > ViewportStateVerification);
+        TestTrue(TEXT("initial viewport retains unattended Automation and commandlet skips"),
+            CaptureModuleSource.Contains(TEXT("FApp::IsUnattended()")) &&
+            CaptureModuleSource.Contains(TEXT("GIsAutomationTesting")) &&
+            CaptureModuleSource.Contains(TEXT("IsRunningCommandlet()")));
+        TestTrue(TEXT("same-session Overview reopen retains the one-time guard"),
+            CaptureModuleSource.Contains(TEXT("if (bInitialViewportConfigured")));
+        TestFalse(TEXT("initial viewport does not mutate persistent viewport preferences"),
+            CaptureModuleSource.Contains(TEXT("GetMutableDefault<ULevelEditorViewportSettings>")));
     }
 
     const FString UserConfig = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Config/DefaultEditorPerProjectUserSettings.ini"));

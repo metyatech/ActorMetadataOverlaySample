@@ -4,13 +4,15 @@
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
 #include "LocationVolume.h"
+#include "LevelEditor.h"
+#include "LevelEditorViewport.h"
 #include "Misc/App.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
-#include "Subsystems/UnrealEditorSubsystem.h"
+#include "Serialization/JsonWriter.h"
 #include "Widgets/SWindow.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogActorMetadataOverlayDemoFixturesEditor, Log, All);
@@ -19,6 +21,70 @@ namespace
 {
     const TCHAR* DemoMapPackage = TEXT("/Game/ActorMetadataOverlayDemo/Maps/ActorMetadataOverlayOverview");
     const FName DemoRegionName(TEXT("AMO_DemoRegion"));
+
+    bool TryResolveReviewOutputPath(
+        const FString& OutputArgument,
+        const TCHAR* RequiredExtension,
+        FString& OutOutputPath,
+        FString& OutAllowedRoot)
+    {
+        FString UnquotedArgument = OutputArgument;
+        UnquotedArgument.TrimQuotesInline();
+        OutOutputPath = FPaths::ConvertRelativePathToFull(UnquotedArgument);
+        OutAllowedRoot = FPaths::ConvertRelativePathToFull(
+            FPaths::ProjectDir() / TEXT(".verification/user-review"));
+        FPaths::MakeStandardFilename(OutOutputPath);
+        FPaths::MakeStandardFilename(OutAllowedRoot);
+        if (!OutAllowedRoot.EndsWith(TEXT("/"), ESearchCase::CaseSensitive))
+        {
+            OutAllowedRoot += TEXT("/");
+        }
+
+        return OutOutputPath.StartsWith(OutAllowedRoot, ESearchCase::IgnoreCase) &&
+               OutOutputPath.EndsWith(RequiredExtension, ESearchCase::IgnoreCase);
+    }
+
+    FLevelEditorViewportClient* FindActivePerspectiveLevelViewportClient()
+    {
+        if (!GEditor)
+        {
+            return nullptr;
+        }
+
+        FViewport* ActiveViewport = GEditor->GetActiveViewport();
+        for (FLevelEditorViewportClient* ViewportClient : GEditor->GetLevelViewportClients())
+        {
+            if (ViewportClient && ViewportClient->Viewport == ActiveViewport && ViewportClient->IsPerspective())
+            {
+                return ViewportClient;
+            }
+        }
+
+        return nullptr;
+    }
+
+    FLevelEditorViewportClient* FindPreferredPerspectiveLevelViewportClient()
+    {
+        if (FLevelEditorViewportClient* ActiveViewportClient = FindActivePerspectiveLevelViewportClient())
+        {
+            return ActiveViewportClient;
+        }
+
+        if (!GEditor)
+        {
+            return nullptr;
+        }
+
+        for (FLevelEditorViewportClient* ViewportClient : GEditor->GetLevelViewportClients())
+        {
+            if (ViewportClient && ViewportClient->IsPerspective())
+            {
+                return ViewportClient;
+            }
+        }
+
+        return nullptr;
+    }
 }
 
 class FActorMetadataOverlayDemoFixturesEditorModule final : public IModuleInterface
@@ -30,14 +96,23 @@ public:
             TEXT("ActorMetadataOverlayDemo.CaptureSlateDebugCanvas"),
             TEXT("Capture the active editor window, including the real Slate Debug Canvas, to a BMP under .verification/user-review."),
             FConsoleCommandWithArgsDelegate::CreateRaw(this, &FActorMetadataOverlayDemoFixturesEditorModule::CaptureSlateDebugCanvas));
+        WriteActiveViewportStateCommand = MakeUnique<FAutoConsoleCommand>(
+            TEXT("ActorMetadataOverlayDemo.WriteActiveViewportState"),
+            TEXT("Write the active Perspective Level Editor viewport state to a JSON file under .verification/user-review without changing it."),
+            FConsoleCommandWithArgsDelegate::CreateRaw(this, &FActorMetadataOverlayDemoFixturesEditorModule::WriteActiveViewportState));
         MapOpenedHandle = FEditorDelegates::OnMapOpened.AddRaw(this, &FActorMetadataOverlayDemoFixturesEditorModule::HandleMapOpened);
+        FLevelEditorModule& LevelEditorModule = FModuleManager::LoadModuleChecked<FLevelEditorModule>(TEXT("LevelEditor"));
+        LevelEditorCreatedHandle = LevelEditorModule.OnLevelEditorCreated().AddRaw(
+            this, &FActorMetadataOverlayDemoFixturesEditorModule::HandleLevelEditorCreated);
         TryLoadDemoRegion();
     }
 
     virtual void ShutdownModule() override
     {
         CaptureDebugCanvasCommand.Reset();
+        WriteActiveViewportStateCommand.Reset();
         RemoveMapOpenedDelegate();
+        RemoveLevelEditorCreatedDelegate();
     }
 
 private:
@@ -50,19 +125,9 @@ private:
             return;
         }
 
-        FString OutputArgument = Arguments[0];
-        OutputArgument.TrimQuotesInline();
-        FString OutputPath = FPaths::ConvertRelativePathToFull(OutputArgument);
-        FString AllowedRoot = FPaths::ConvertRelativePathToFull(
-            FPaths::ProjectDir() / TEXT(".verification/user-review"));
-        FPaths::MakeStandardFilename(OutputPath);
-        FPaths::MakeStandardFilename(AllowedRoot);
-        if (!AllowedRoot.EndsWith(TEXT("/"), ESearchCase::CaseSensitive))
-        {
-            AllowedRoot += TEXT("/");
-        }
-        if (!OutputPath.StartsWith(AllowedRoot, ESearchCase::IgnoreCase) ||
-            !OutputPath.EndsWith(TEXT(".bmp"), ESearchCase::IgnoreCase))
+        FString OutputPath;
+        FString AllowedRoot;
+        if (!TryResolveReviewOutputPath(Arguments[0], TEXT(".bmp"), OutputPath, AllowedRoot))
         {
             UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Error,
                 TEXT("CaptureSlateDebugCanvas rejected output path outside %s or without a .bmp extension: %s"),
@@ -102,7 +167,84 @@ private:
             ImageSize.Y);
     }
 
+    void WriteActiveViewportState(const TArray<FString>& Arguments)
+    {
+        if (Arguments.Num() != 1)
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Error,
+                TEXT("WriteActiveViewportState requires exactly one JSON output path under .verification/user-review."));
+            return;
+        }
+
+        FString OutputPath;
+        FString AllowedRoot;
+        if (!TryResolveReviewOutputPath(Arguments[0], TEXT(".json"), OutputPath, AllowedRoot))
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Error,
+                TEXT("WriteActiveViewportState rejected output path outside %s or without a .json extension: %s"),
+                *AllowedRoot,
+                *OutputPath);
+            return;
+        }
+
+        const FLevelEditorViewportClient* ViewportClient = FindActivePerspectiveLevelViewportClient();
+        const UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+        if (!ViewportClient || !World)
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Error,
+                TEXT("WriteActiveViewportState could not resolve the active Perspective Level Editor viewport."));
+            return;
+        }
+
+        const FVector Location = ViewportClient->GetViewLocation();
+        const FRotator Rotation = ViewportClient->GetViewRotation();
+        TSharedRef<FJsonObject> State = MakeShared<FJsonObject>();
+        State->SetStringField(TEXT("map"), World->GetOutermost()->GetName());
+        State->SetBoolField(TEXT("perspective"), ViewportClient->IsPerspective());
+        State->SetArrayField(TEXT("location"), {
+            MakeShared<FJsonValueNumber>(Location.X),
+            MakeShared<FJsonValueNumber>(Location.Y),
+            MakeShared<FJsonValueNumber>(Location.Z)});
+        State->SetArrayField(TEXT("rotation"), {
+            MakeShared<FJsonValueNumber>(Rotation.Pitch),
+            MakeShared<FJsonValueNumber>(Rotation.Yaw),
+            MakeShared<FJsonValueNumber>(Rotation.Roll)});
+        State->SetNumberField(TEXT("fov"), ViewportClient->ViewFOV);
+
+        FString SerializedState;
+        const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&SerializedState);
+        if (!FJsonSerializer::Serialize(State, Writer))
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Error,
+                TEXT("WriteActiveViewportState could not serialize viewport state for %s."),
+                *OutputPath);
+            return;
+        }
+
+        IFileManager::Get().MakeDirectory(*FPaths::GetPath(OutputPath), true);
+        if (!FFileHelper::SaveStringToFile(SerializedState, *OutputPath))
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Error,
+                TEXT("WriteActiveViewportState could not save %s."),
+                *OutputPath);
+            return;
+        }
+
+        UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Display,
+            TEXT("ACTIVE_VIEWPORT_STATE_SAVED path=%s map=%s location=%s rotation=%s fov=%.6f"),
+            *OutputPath,
+            *World->GetOutermost()->GetName(),
+            *Location.ToString(),
+            *Rotation.ToString(),
+            ViewportClient->ViewFOV);
+    }
+
     void HandleMapOpened(const FString&, bool)
+    {
+        TryLoadDemoRegion();
+    }
+
+    void HandleLevelEditorCreated(TSharedPtr<ILevelEditor>)
     {
         TryLoadDemoRegion();
     }
@@ -113,6 +255,16 @@ private:
         {
             FEditorDelegates::OnMapOpened.Remove(MapOpenedHandle);
             MapOpenedHandle.Reset();
+        }
+    }
+
+    void RemoveLevelEditorCreatedDelegate()
+    {
+        if (LevelEditorCreatedHandle.IsValid() && FModuleManager::Get().IsModuleLoaded(TEXT("LevelEditor")))
+        {
+            FLevelEditorModule& LevelEditorModule = FModuleManager::GetModuleChecked<FLevelEditorModule>(TEXT("LevelEditor"));
+            LevelEditorModule.OnLevelEditorCreated().Remove(LevelEditorCreatedHandle);
+            LevelEditorCreatedHandle.Reset();
         }
     }
 
@@ -207,11 +359,20 @@ private:
 
         const TArray<TSharedPtr<FJsonValue>>* LocationValues = nullptr;
         const TArray<TSharedPtr<FJsonValue>>* RotationValues = nullptr;
+        double Fov = 0.0;
         if (!(*CameraObject)->TryGetArrayField(TEXT("location"), LocationValues) || !LocationValues || LocationValues->Num() != 3 ||
-            !(*CameraObject)->TryGetArrayField(TEXT("rotation"), RotationValues) || !RotationValues || RotationValues->Num() != 3)
+            !(*CameraObject)->TryGetArrayField(TEXT("rotation"), RotationValues) || !RotationValues || RotationValues->Num() != 3 ||
+            !(*CameraObject)->TryGetNumberField(TEXT("fov"), Fov))
         {
             UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Warning,
-                TEXT("demo-spec.json overviewCamera must contain three-value location and rotation arrays."));
+                TEXT("demo-spec.json overviewCamera must contain three-value location and rotation arrays plus a numeric fov; actual fov is missing or non-numeric."));
+            return;
+        }
+        if (!FMath::IsFinite(Fov) || Fov < 35.0 || Fov > 80.0)
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Warning,
+                TEXT("demo-spec.json overviewCamera fov is invalid; actual=%.17g required=finite range=[35,80]."),
+                Fov);
             return;
         }
 
@@ -223,13 +384,54 @@ private:
             (*RotationValues)[0]->AsNumber(),
             (*RotationValues)[1]->AsNumber(),
             (*RotationValues)[2]->AsNumber());
-        if (UUnrealEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>())
+        FLevelEditorViewportClient* ViewportClient = FindPreferredPerspectiveLevelViewportClient();
+        if (!ViewportClient)
         {
-            EditorSubsystem->SetLevelViewportCameraInfo(Location, Rotation);
-            bInitialViewportConfigured = true;
-            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Display,
-                TEXT("Initial Overview Camera composition applied once for the Editor session."));
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Warning,
+                TEXT("Initial Overview Camera composition could not find a Perspective Level Editor viewport; expected location=%s rotation=%s fov=%.6f."),
+                *Location.ToString(),
+                *Rotation.ToString(),
+                Fov);
+            return;
         }
+
+        ViewportClient->SetViewLocationForOrbiting(Location);
+        ViewportClient->SetViewLocation(Location);
+        ViewportClient->SetViewRotation(Rotation);
+        ViewportClient->ViewFOV = static_cast<float>(Fov);
+        ViewportClient->Invalidate(false, false);
+        if (ViewportClient->Viewport)
+        {
+            ViewportClient->Viewport->InvalidateDisplay();
+        }
+        GEditor->RedrawLevelEditingViewports(false);
+
+        const FVector ActualLocation = ViewportClient->GetViewLocation();
+        const FRotator ActualRotation = ViewportClient->GetViewRotation();
+        const float ActualFov = ViewportClient->ViewFOV;
+        const bool bViewportStateMatches =
+            ActualLocation.Equals(Location, 0.01) &&
+            ActualRotation.Equals(Rotation, 0.01) &&
+            FMath::IsNearlyEqual(ActualFov, static_cast<float>(Fov), 0.01f);
+        if (!bViewportStateMatches)
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Warning,
+                TEXT("Initial Overview Camera verification failed; expected location=%s rotation=%s fov=%.6f actual location=%s rotation=%s fov=%.6f."),
+                *Location.ToString(),
+                *Rotation.ToString(),
+                Fov,
+                *ActualLocation.ToString(),
+                *ActualRotation.ToString(),
+                ActualFov);
+            return;
+        }
+
+        bInitialViewportConfigured = true;
+        UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Display,
+            TEXT("Initial Overview Camera composition applied once for the Editor session: location=%s rotation=%s fov=%.6f."),
+            *ActualLocation.ToString(),
+            *ActualRotation.ToString(),
+            ActualFov);
     }
 
     void WarnRegionProblem(const TCHAR* Reason)
@@ -249,7 +451,9 @@ private:
     }
 
     FDelegateHandle MapOpenedHandle;
+    FDelegateHandle LevelEditorCreatedHandle;
     TUniquePtr<FAutoConsoleCommand> CaptureDebugCanvasCommand;
+    TUniquePtr<FAutoConsoleCommand> WriteActiveViewportStateCommand;
     bool bRegionWarningIssued = false;
     bool bInitialViewportConfigured = false;
 };
