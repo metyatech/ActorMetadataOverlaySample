@@ -1031,11 +1031,13 @@ bool FActorMetadataSamplePresentationTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("initial viewport targets a Perspective Level Editor viewport"),
             CaptureModuleSource.Contains(TEXT("FLevelEditorViewportClient")) &&
             CaptureModuleSource.Contains(TEXT("IsPerspective()")));
-        TestFalse(TEXT("initial viewport does not mutate the orbit pivot"),
+        TestFalse(TEXT("initial viewport does not use SetViewLocationForOrbiting"),
             CaptureModuleSource.Contains(TEXT("SetViewLocationForOrbiting")));
-        TestFalse(TEXT("initial viewport does not use look-at or orbit APIs"),
-            CaptureModuleSource.Contains(TEXT("SetLookAtLocation")) &&
-            CaptureModuleSource.Contains(TEXT("ToggleOrbitCamera")) &&
+        TestFalse(TEXT("initial viewport does not use SetLookAtLocation"),
+            CaptureModuleSource.Contains(TEXT("SetLookAtLocation")));
+        TestFalse(TEXT("initial viewport does not use ToggleOrbitCamera"),
+            CaptureModuleSource.Contains(TEXT("ToggleOrbitCamera")));
+        TestFalse(TEXT("initial viewport does not contain OrbitCamera"),
             CaptureModuleSource.Contains(TEXT("OrbitCamera")));
         TestTrue(TEXT("initial viewport applies location and rotation directly"),
             CaptureModuleSource.Contains(TEXT("SetViewLocation(Location)")) &&
