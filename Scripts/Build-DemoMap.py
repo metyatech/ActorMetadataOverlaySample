@@ -436,7 +436,20 @@ def configure_text_actor(actor, entry):
     vertical_alignment = component.get_editor_property("vertical_alignment")
     set_property(component, "horizontal_alignment", type(horizontal_alignment).EHTA_CENTER)
     set_property(component, "vertical_alignment", type(vertical_alignment).EVRTA_TEXT_CENTER)
-    set_property(component, "text_render_color", unreal.Color(224, 242, 250, 255))
+    color_values = entry.get("textColor", [224, 242, 250, 255])
+    if not isinstance(color_values, list) or len(color_values) != 4 or any(
+            not isinstance(value, int) or value < 0 or value > 255 for value in color_values):
+        raise RuntimeError("{} textColor must contain four byte values".format(entry["actorName"]))
+    set_property(
+        component,
+        "text_render_color",
+        unreal.Color(
+            r=color_values[0],
+            g=color_values[1],
+            b=color_values[2],
+            a=color_values[3],
+        ),
+    )
 
 
 def configure_camera_actor(actor, entry):

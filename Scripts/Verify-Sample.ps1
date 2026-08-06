@@ -114,6 +114,80 @@ if (($visualMeshPaths | Where-Object { $_ -notlike '/Engine/BasicShapes/*' }).Co
     throw 'A visualMesh outside Engine Basic Shapes was found.'
 }
 
+$expectedSignage = [ordered]@{
+    AMO_Environment_Text_Title = [pscustomobject]@{ Text = 'ACTOR METADATA OVERLAY'; MinimumSize = 180.0 }
+    AMO_Environment_Text_ShowMode = [pscustomobject]@{ Text = 'Viewport Show  /  Actor Metadata Overlay'; MinimumSize = 80.0 }
+    AMO_Environment_Text_Modes = [pscustomobject]@{ Text = 'Selected Actors   /   All Matching Actors   /   Off'; MinimumSize = 68.0 }
+    AMO_Environment_Text_Instructions = [pscustomobject]@{ Text = "Select a fixture to inspect metadata.`nThe gray station is excluded with OverlayHidden.`nThe 200 m actor demonstrates draw-distance filtering."; MinimumSize = 60.0 }
+}
+$signageEntries = @($spec.signage.texts)
+if ($signageEntries.Count -ne $expectedSignage.Count) {
+    throw "Expected exactly $($expectedSignage.Count) signage text actors; found $($signageEntries.Count)."
+}
+foreach ($expectedSignageEntry in $expectedSignage.GetEnumerator()) {
+    $matchingSignage = @($signageEntries | Where-Object { $_.actorName -eq $expectedSignageEntry.Key })
+    if ($matchingSignage.Count -ne 1) {
+        throw "Expected exactly one signage actor named $($expectedSignageEntry.Key)."
+    }
+    $signageEntry = $matchingSignage[0]
+    if ($signageEntry.actorClass -ne 'ATextRenderActor' -or $signageEntry.text -ne $expectedSignageEntry.Value.Text) {
+        throw "Signage actor $($expectedSignageEntry.Key) has the wrong class or text."
+    }
+    if ([double]$signageEntry.textSize -lt $expectedSignageEntry.Value.MinimumSize) {
+        throw "Signage actor $($expectedSignageEntry.Key) is smaller than its public-presentation minimum size."
+    }
+    if (@($signageEntry.location).Count -ne 3 -or @($signageEntry.rotation).Count -ne 3 -or @($signageEntry.scale).Count -ne 3) {
+        throw "Signage actor $($expectedSignageEntry.Key) must define three-value location, rotation, and scale arrays."
+    }
+    if ([double]$signageEntry.rotation[0] -ne 0.0 -or [double]$signageEntry.rotation[1] -ne -90.0 -or [double]$signageEntry.rotation[2] -ne 0.0) {
+        throw "Signage actor $($expectedSignageEntry.Key) must face the Overview Camera with the verified negative-Y rotation."
+    }
+    if (@($signageEntry.textColor).Count -ne 4 -or [int]$signageEntry.textColor[3] -ne 255) {
+        throw "Signage actor $($expectedSignageEntry.Key) must define an opaque RGBA textColor."
+    }
+    $boardFrontY = [double]$spec.presentation.plaza.backdrop.location[1] - 25.0
+    if ([double]$signageEntry.location[1] -ge $boardFrontY -or [double]$signageEntry.location[1] -lt ($boardFrontY - 160.0)) {
+        throw "Signage actor $($expectedSignageEntry.Key) must remain visibly in front of the Title Board without excessive floating."
+    }
+}
+
+$captureViewNames = @('overviewSelected', 'overviewClean', 'distanceLane')
+if (-not $spec.captureViews) {
+    throw 'demo-spec.json must define machine-readable captureViews for selected, clean, and distance evidence.'
+}
+foreach ($captureViewName in $captureViewNames) {
+    $captureView = $spec.captureViews.$captureViewName
+    if (-not $captureView -or @($captureView.location).Count -ne 3 -or @($captureView.rotation).Count -ne 3 -or
+        [double]$captureView.fov -lt 35.0 -or [double]$captureView.fov -gt 80.0) {
+        throw "captureViews.$captureViewName must define a three-value location, three-value rotation, and sane FOV."
+    }
+}
+
+$expectedDistanceLabels = [ordered]@{
+    AMO_Environment_Text_50m = [pscustomobject]@{ Text = '50 m  REFERENCE'; Yaw = -122.0 }
+    AMO_Environment_Text_100m = [pscustomobject]@{ Text = '100 m  DEFAULT DRAW DISTANCE'; Yaw = -145.0 }
+    AMO_Environment_Text_200m = [pscustomobject]@{ Text = '200 m  FAR ACTOR'; Yaw = -161.0 }
+}
+$distanceLabels = @($spec.distanceLane.labels)
+if ($distanceLabels.Count -ne $expectedDistanceLabels.Count) {
+    throw "Expected exactly $($expectedDistanceLabels.Count) distance labels; found $($distanceLabels.Count)."
+}
+foreach ($expectedDistanceLabel in $expectedDistanceLabels.GetEnumerator()) {
+    $matchingLabels = @($distanceLabels | Where-Object { $_.actorName -eq $expectedDistanceLabel.Key })
+    if ($matchingLabels.Count -ne 1 -or $matchingLabels[0].text -ne $expectedDistanceLabel.Value.Text) {
+        throw "Distance label $($expectedDistanceLabel.Key) is missing or has the wrong text."
+    }
+    $distanceLabel = $matchingLabels[0]
+    if ([double]$distanceLabel.textSize -lt 120.0 -or [double]$distanceLabel.rotation[0] -ne 0.0 -or
+        [double]$distanceLabel.rotation[1] -ne $expectedDistanceLabel.Value.Yaw -or [double]$distanceLabel.rotation[2] -ne 0.0) {
+        throw "Distance label $($expectedDistanceLabel.Key) must be large and camera-facing for the public distance view."
+    }
+}
+$defaultBoundary = $spec.distanceLane.boundary
+if ([double]$defaultBoundary.location[2] -lt 250.0 -or [double]$defaultBoundary.scale[1] -lt 7.5 -or [double]$defaultBoundary.scale[2] -lt 0.2) {
+    throw 'The 100 m default boundary must form a raised crossbar that is distinguishable without color.'
+}
+
 $materials = $spec.materials
 $materialRoot = '/Game/ActorMetadataOverlayDemo/Visuals/Materials'
 if (-not $materials -or $materials.root -ne $materialRoot -or -not $materials.master -or $materials.master.path -ne "$materialRoot/M_AMO_Surface") {
@@ -331,7 +405,7 @@ if ($LASTEXITCODE -eq 0 -and $displayModeAssignments) {
     throw 'Sample scripts contain a DisplayMode assignment.'
 }
 $captureScriptText = Get-Content -LiteralPath (Join-Path $sampleRoot 'Scripts/Capture/Apply-DemoSpec.py') -Raw
-foreach ($ignoredCaptureKey in @('visualEnvironment', 'visualMesh', 'visualMaterial', 'materials', 'presentation', 'stations', 'distanceLane', 'signage', 'overviewCamera')) {
+foreach ($ignoredCaptureKey in @('visualEnvironment', 'visualMesh', 'visualMaterial', 'materials', 'presentation', 'stations', 'distanceLane', 'signage', 'overviewCamera', 'captureViews')) {
     if ($captureScriptText.Contains($ignoredCaptureKey)) {
         throw "Capture Apply script must ignore the public presentation key '$ignoredCaptureKey'."
     }
@@ -455,6 +529,16 @@ $mapState = [pscustomobject]@{
 if ($mapState.Size -le 0) {
     throw 'The overview map is missing or empty.'
 }
+$showcasePath = Join-Path $sampleRoot 'Documentation\Images\actor-metadata-overlay-showcase.png'
+Add-Type -AssemblyName System.Drawing
+$showcaseImage = [System.Drawing.Image]::FromFile($showcasePath)
+try {
+    if ($showcaseImage.Width -ne 1600 -or $showcaseImage.Height -ne 900) {
+        throw "README showcase dimensions must be 1600x900; found $($showcaseImage.Width)x$($showcaseImage.Height)."
+    }
+} finally {
+    $showcaseImage.Dispose()
+}
 
 $result = [pscustomobject]@{
     EngineVersion = $EngineVersion
@@ -513,6 +597,15 @@ $result = [pscustomobject]@{
         SpatiallyLoaded = $false
     }
     DistanceMarkers = @($spec.distanceLane.markers | ForEach-Object { [pscustomobject]@{ ActorName = $_.actorName; DistanceMeters = $_.distanceMeters } })
+    CaptureViews = [pscustomobject]@{
+        OverviewSelected = $spec.captureViews.overviewSelected
+        OverviewClean = $spec.captureViews.overviewClean
+        DistanceLane = $spec.captureViews.distanceLane
+    }
+    Signage = @($signageEntries | ForEach-Object { [pscustomobject]@{ ActorName = $_.actorName; Text = $_.text; TextSize = $_.textSize; Rotation = $_.rotation; TextColor = $_.textColor } })
+    DistanceLabels = @($distanceLabels | ForEach-Object { [pscustomobject]@{ ActorName = $_.actorName; Text = $_.text; TextSize = $_.textSize; Rotation = $_.rotation } })
+    DefaultBoundary = [pscustomobject]@{ Location = $defaultBoundary.location; Scale = $defaultBoundary.scale; NonColorShapeDifference = $true }
+    ReadmeShowcase = [pscustomobject]@{ Width = 1600; Height = 900 }
     CaptureApplyExcludesPresentation = $true
     GeneratedActorWaitSet = $generatedActorWaitSet
     GeneratedActorWaitCount = $generatedActorWaitSet.Count

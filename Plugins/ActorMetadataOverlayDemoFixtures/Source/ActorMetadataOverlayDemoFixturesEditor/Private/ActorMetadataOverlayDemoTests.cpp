@@ -858,8 +858,67 @@ bool FActorMetadataSamplePresentationTest::RunTest(const FString& Parameters)
         CheckStaticPresentationActor(BorderValue->AsObject(), TEXT("distance lane border"));
     }
 
+    auto ReadVector = [](const TSharedPtr<FJsonObject>& Object, const TCHAR* FieldName)
+    {
+        const TArray<TSharedPtr<FJsonValue>>& Values = Object->GetArrayField(FieldName);
+        return FVector(Values[0]->AsNumber(), Values[1]->AsNumber(), Values[2]->AsNumber());
+    };
+    auto ReadRotator = [](const TSharedPtr<FJsonObject>& Object, const TCHAR* FieldName)
+    {
+        const TArray<TSharedPtr<FJsonValue>>& Values = Object->GetArrayField(FieldName);
+        return FRotator(Values[0]->AsNumber(), Values[1]->AsNumber(), Values[2]->AsNumber());
+    };
+
+    const TArray<TSharedPtr<FJsonValue>>& DistanceLabelValues = Lane->GetArrayField(TEXT("labels"));
+    TestEqual(TEXT("distance label count"), DistanceLabelValues.Num(), 3);
+    TSet<FString> DistanceLabelNames;
+    for (const TSharedPtr<FJsonValue>& TextValue : DistanceLabelValues)
+    {
+        const TSharedPtr<FJsonObject> TextSpec = TextValue->AsObject();
+        const FString ActorName = TextSpec->GetStringField(TEXT("actorName"));
+        int32 NameCount = 0;
+        AActor* Actor = ActorMetadataOverlayDemoTests::FindActorByName(World, ActorName, NameCount);
+        TestEqual(FString::Printf(TEXT("distance label actor unique: %s"), *ActorName), NameCount, 1);
+        TestNotNull(FString::Printf(TEXT("distance label actor exists: %s"), *ActorName), Actor);
+        TestTrue(FString::Printf(TEXT("distance label name is expected: %s"), *ActorName),
+            ActorName == TEXT("AMO_Environment_Text_50m") || ActorName == TEXT("AMO_Environment_Text_100m") ||
+            ActorName == TEXT("AMO_Environment_Text_200m"));
+        TestTrue(FString::Printf(TEXT("distance label name is unique: %s"), *ActorName), !DistanceLabelNames.Contains(ActorName));
+        DistanceLabelNames.Add(ActorName);
+        UTextRenderComponent* TextComponent = Actor ? Actor->FindComponentByClass<UTextRenderComponent>() : nullptr;
+        TestNotNull(FString::Printf(TEXT("distance label component exists: %s"), *ActorName), TextComponent);
+        if (Actor && TextComponent)
+        {
+            TestEqual(FString::Printf(TEXT("distance label text: %s"), *ActorName), TextComponent->Text.ToString(), TextSpec->GetStringField(TEXT("text")));
+            TestTrue(FString::Printf(TEXT("distance label location: %s"), *ActorName),
+                Actor->GetActorLocation().Equals(ReadVector(TextSpec, TEXT("location")), 0.1));
+            TestTrue(FString::Printf(TEXT("distance label rotation: %s"), *ActorName),
+                Actor->GetActorRotation().Equals(ReadRotator(TextSpec, TEXT("rotation")), 0.1));
+            TestTrue(FString::Printf(TEXT("distance label size: %s"), *ActorName),
+                FMath::IsNearlyEqual(TextComponent->WorldSize, TextSpec->GetNumberField(TEXT("textSize")), 0.1));
+        }
+    }
+
+    const TSharedPtr<FJsonObject> BoundarySpec = Lane->GetObjectField(TEXT("boundary"));
+    int32 BoundaryNameCount = 0;
+    AActor* BoundaryActor = ActorMetadataOverlayDemoTests::FindActorByName(
+        World, BoundarySpec->GetStringField(TEXT("actorName")), BoundaryNameCount);
+    TestEqual(TEXT("100m boundary actor unique"), BoundaryNameCount, 1);
+    TestNotNull(TEXT("100m boundary actor exists"), BoundaryActor);
+    if (BoundaryActor)
+    {
+        const FVector ExpectedBoundaryLocation = ReadVector(BoundarySpec, TEXT("location"));
+        const FVector ExpectedBoundaryScale = ReadVector(BoundarySpec, TEXT("scale"));
+        TestTrue(TEXT("100m boundary location matches spec"), BoundaryActor->GetActorLocation().Equals(ExpectedBoundaryLocation, 0.1));
+        TestTrue(TEXT("100m boundary scale matches spec"), BoundaryActor->GetActorScale3D().Equals(ExpectedBoundaryScale, 0.01));
+        TestTrue(TEXT("100m boundary has a non-color height landmark"),
+            ExpectedBoundaryLocation.Z >= 250.0 && ExpectedBoundaryScale.Z >= 0.2);
+    }
+
     const TSharedPtr<FJsonObject> Signage = Spec->GetObjectField(TEXT("signage"));
     TSet<FString> SignageText;
+    TSet<FString> SignageNames;
+    const double BoardFrontY = Plaza->GetObjectField(TEXT("backdrop"))->GetArrayField(TEXT("location"))[1]->AsNumber() - 25.0;
     for (const TSharedPtr<FJsonValue>& TextValue : Signage->GetArrayField(TEXT("texts")))
     {
         const TSharedPtr<FJsonObject> TextSpec = TextValue->AsObject();
@@ -868,13 +927,31 @@ bool FActorMetadataSamplePresentationTest::RunTest(const FString& Parameters)
         AActor* Actor = ActorMetadataOverlayDemoTests::FindActorByName(World, ActorName, NameCount);
         TestEqual(FString::Printf(TEXT("signage actor unique: %s"), *ActorName), NameCount, 1);
         TestNotNull(FString::Printf(TEXT("signage actor exists: %s"), *ActorName), Actor);
+        TestTrue(FString::Printf(TEXT("signage actor name is unique: %s"), *ActorName), !SignageNames.Contains(ActorName));
+        SignageNames.Add(ActorName);
         UTextRenderComponent* TextComponent = Actor ? Actor->FindComponentByClass<UTextRenderComponent>() : nullptr;
         TestNotNull(FString::Printf(TEXT("signage text component exists: %s"), *ActorName), TextComponent);
-        if (TextComponent)
+        if (Actor && TextComponent)
         {
             SignageText.Add(TextComponent->Text.ToString());
+            TestEqual(FString::Printf(TEXT("signage text matches spec: %s"), *ActorName), TextComponent->Text.ToString(), TextSpec->GetStringField(TEXT("text")));
+            TestTrue(FString::Printf(TEXT("signage location matches spec: %s"), *ActorName),
+                Actor->GetActorLocation().Equals(ReadVector(TextSpec, TEXT("location")), 0.1));
+            TestTrue(FString::Printf(TEXT("signage rotation matches spec: %s"), *ActorName),
+                Actor->GetActorRotation().Equals(ReadRotator(TextSpec, TEXT("rotation")), 0.1));
+            TestTrue(FString::Printf(TEXT("signage scale matches spec: %s"), *ActorName),
+                Actor->GetActorScale3D().Equals(ReadVector(TextSpec, TEXT("scale")), 0.01));
+            TestTrue(FString::Printf(TEXT("signage size matches spec: %s"), *ActorName),
+                FMath::IsNearlyEqual(TextComponent->WorldSize, TextSpec->GetNumberField(TEXT("textSize")), 0.1));
+            TestTrue(FString::Printf(TEXT("signage remains in front of board: %s"), *ActorName),
+                Actor->GetActorLocation().Y < BoardFrontY && Actor->GetActorLocation().Y >= BoardFrontY - 160.0);
+            const TArray<TSharedPtr<FJsonValue>>& ColorValues = TextSpec->GetArrayField(TEXT("textColor"));
+            const FColor ExpectedColor(
+                ColorValues[0]->AsNumber(), ColorValues[1]->AsNumber(), ColorValues[2]->AsNumber(), ColorValues[3]->AsNumber());
+            TestEqual(FString::Printf(TEXT("signage color matches spec: %s"), *ActorName), TextComponent->TextRenderColor, ExpectedColor);
         }
     }
+    TestEqual(TEXT("signage actor count"), SignageNames.Num(), 4);
     TestTrue(TEXT("title board text is present"), SignageText.Contains(TEXT("ACTOR METADATA OVERLAY")));
     TestTrue(TEXT("show mode text is present"), SignageText.Contains(TEXT("Viewport Show  /  Actor Metadata Overlay")));
 
@@ -887,8 +964,28 @@ bool FActorMetadataSamplePresentationTest::RunTest(const FString& Parameters)
     TestNotNull(TEXT("overview camera is a CameraActor"), OverviewCamera);
     if (OverviewCamera)
     {
-        TestTrue(TEXT("overview camera FOV is sane"), OverviewCamera->GetCameraComponent()->FieldOfView > 35.0f && OverviewCamera->GetCameraComponent()->FieldOfView < 80.0f);
+        TestTrue(TEXT("overview camera location matches spec"),
+            OverviewCamera->GetActorLocation().Equals(ReadVector(CameraSpec, TEXT("location")), 0.1));
+        TestTrue(TEXT("overview camera rotation matches spec"),
+            OverviewCamera->GetActorRotation().Equals(ReadRotator(CameraSpec, TEXT("rotation")), 0.1));
+        TestTrue(TEXT("overview camera FOV matches spec"),
+            FMath::IsNearlyEqual(OverviewCamera->GetCameraComponent()->FieldOfView, CameraSpec->GetNumberField(TEXT("fov")), 0.1));
     }
+
+    const TSharedPtr<FJsonObject> CaptureViews = Spec->GetObjectField(TEXT("captureViews"));
+    for (const TCHAR* CaptureViewName : {TEXT("overviewSelected"), TEXT("overviewClean"), TEXT("distanceLane")})
+    {
+        const TSharedPtr<FJsonObject> CaptureView = CaptureViews->GetObjectField(CaptureViewName);
+        TestEqual(FString::Printf(TEXT("capture view location shape: %s"), CaptureViewName),
+            CaptureView->GetArrayField(TEXT("location")).Num(), 3);
+        TestEqual(FString::Printf(TEXT("capture view rotation shape: %s"), CaptureViewName),
+            CaptureView->GetArrayField(TEXT("rotation")).Num(), 3);
+        TestTrue(FString::Printf(TEXT("capture view FOV is sane: %s"), CaptureViewName),
+            CaptureView->GetNumberField(TEXT("fov")) >= 35.0 && CaptureView->GetNumberField(TEXT("fov")) <= 80.0);
+    }
+
+    TestEqual(TEXT("presentation actor count remains 30"),
+        PresentationNames.Num() + DistanceLabelNames.Num() + SignageNames.Num() + CameraNameCount, 30);
 
     ALocationVolume* DemoRegion = nullptr;
     int32 RegionCount = 0;
@@ -904,6 +1001,23 @@ bool FActorMetadataSamplePresentationTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("presentation region loaded"), DemoRegion && DemoRegion->IsLoaded());
     TestTrue(TEXT("presentation region hidden"), DemoRegion && DemoRegion->IsTemporarilyHiddenInEditor());
     TestFalse(TEXT("presentation test does not require startup Python"), FPaths::FileExists(FPaths::ProjectDir() / TEXT("Content/Python/init_unreal.py")));
+
+    FString CaptureModuleSource;
+    const FString CaptureModulePath = FPaths::ProjectDir() /
+        TEXT("Plugins/ActorMetadataOverlayDemoFixtures/Source/ActorMetadataOverlayDemoFixturesEditor/Private/ActorMetadataOverlayDemoFixturesEditor.cpp");
+    TestTrue(TEXT("real overlay capture implementation is readable"),
+        FFileHelper::LoadFileToString(CaptureModuleSource, *CaptureModulePath));
+    if (!CaptureModuleSource.IsEmpty())
+    {
+        TestTrue(TEXT("real overlay capture command remains registered"),
+            CaptureModuleSource.Contains(TEXT("ActorMetadataOverlayDemo.CaptureSlateDebugCanvas")));
+        TestTrue(TEXT("real overlay capture redraws the active viewport synchronously"),
+            CaptureModuleSource.Contains(TEXT("ActiveViewport->Draw(false)")));
+        TestTrue(TEXT("real overlay capture uses the Slate debug-canvas layer"),
+            CaptureModuleSource.Contains(TEXT("FSlateApplication::Get().TakeScreenshot")));
+        TestTrue(TEXT("real overlay capture is confined to ignored review evidence"),
+            CaptureModuleSource.Contains(TEXT(".verification/user-review")));
+    }
 
     const FString UserConfig = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Config/DefaultEditorPerProjectUserSettings.ini"));
     TestTrue(TEXT("presentation keeps Selected display mode"), UserConfig.Contains(TEXT("DisplayMode=Selected")));

@@ -1,5 +1,8 @@
 #include "Editor.h"
 #include "EngineUtils.h"
+#include "Framework/Application/SlateApplication.h"
+#include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "LocationVolume.h"
 #include "Misc/App.h"
 #include "Misc/FileHelper.h"
@@ -8,6 +11,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Subsystems/UnrealEditorSubsystem.h"
+#include "Widgets/SWindow.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogActorMetadataOverlayDemoFixturesEditor, Log, All);
 
@@ -22,16 +26,82 @@ class FActorMetadataOverlayDemoFixturesEditorModule final : public IModuleInterf
 public:
     virtual void StartupModule() override
     {
+        CaptureDebugCanvasCommand = MakeUnique<FAutoConsoleCommand>(
+            TEXT("ActorMetadataOverlayDemo.CaptureSlateDebugCanvas"),
+            TEXT("Capture the active editor window, including the real Slate Debug Canvas, to a BMP under .verification/user-review."),
+            FConsoleCommandWithArgsDelegate::CreateRaw(this, &FActorMetadataOverlayDemoFixturesEditorModule::CaptureSlateDebugCanvas));
         MapOpenedHandle = FEditorDelegates::OnMapOpened.AddRaw(this, &FActorMetadataOverlayDemoFixturesEditorModule::HandleMapOpened);
         TryLoadDemoRegion();
     }
 
     virtual void ShutdownModule() override
     {
+        CaptureDebugCanvasCommand.Reset();
         RemoveMapOpenedDelegate();
     }
 
 private:
+    void CaptureSlateDebugCanvas(const TArray<FString>& Arguments)
+    {
+        if (Arguments.Num() != 1)
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Error,
+                TEXT("CaptureSlateDebugCanvas requires exactly one BMP output path under .verification/user-review."));
+            return;
+        }
+
+        FString OutputArgument = Arguments[0];
+        OutputArgument.TrimQuotesInline();
+        FString OutputPath = FPaths::ConvertRelativePathToFull(OutputArgument);
+        FString AllowedRoot = FPaths::ConvertRelativePathToFull(
+            FPaths::ProjectDir() / TEXT(".verification/user-review"));
+        FPaths::MakeStandardFilename(OutputPath);
+        FPaths::MakeStandardFilename(AllowedRoot);
+        if (!AllowedRoot.EndsWith(TEXT("/"), ESearchCase::CaseSensitive))
+        {
+            AllowedRoot += TEXT("/");
+        }
+        if (!OutputPath.StartsWith(AllowedRoot, ESearchCase::IgnoreCase) ||
+            !OutputPath.EndsWith(TEXT(".bmp"), ESearchCase::IgnoreCase))
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Error,
+                TEXT("CaptureSlateDebugCanvas rejected output path outside %s or without a .bmp extension: %s"),
+                *AllowedRoot,
+                *OutputPath);
+            return;
+        }
+
+        FViewport* ActiveViewport = GEditor ? GEditor->GetActiveViewport() : nullptr;
+        TSharedPtr<SWindow> ActiveWindow = FSlateApplication::IsInitialized()
+            ? FSlateApplication::Get().GetActiveTopLevelWindow()
+            : nullptr;
+        if (!ActiveViewport || !ActiveWindow.IsValid())
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Error,
+                TEXT("CaptureSlateDebugCanvas could not resolve the active viewport and editor window."));
+            return;
+        }
+
+        IFileManager::Get().MakeDirectory(*FPaths::GetPath(OutputPath), true);
+        ActiveViewport->Draw(false);
+        TArray<FColor> ImageData;
+        FIntVector ImageSize;
+        if (!FSlateApplication::Get().TakeScreenshot(ActiveWindow.ToSharedRef(), ImageData, ImageSize) ||
+            !FFileHelper::CreateBitmap(*OutputPath, ImageSize.X, ImageSize.Y, ImageData.GetData()))
+        {
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Error,
+                TEXT("CaptureSlateDebugCanvas failed to save %s."),
+                *OutputPath);
+            return;
+        }
+
+        UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Display,
+            TEXT("CAPTURE_SLATE_DEBUG_CANVAS_SAVED path=%s size=%dx%d"),
+            *OutputPath,
+            ImageSize.X,
+            ImageSize.Y);
+    }
+
     void HandleMapOpened(const FString&, bool)
     {
         TryLoadDemoRegion();
@@ -179,6 +249,7 @@ private:
     }
 
     FDelegateHandle MapOpenedHandle;
+    TUniquePtr<FAutoConsoleCommand> CaptureDebugCanvasCommand;
     bool bRegionWarningIssued = false;
     bool bInitialViewportConfigured = false;
 };
