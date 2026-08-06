@@ -387,15 +387,14 @@ private:
         FLevelEditorViewportClient* ViewportClient = FindPreferredPerspectiveLevelViewportClient();
         if (!ViewportClient)
         {
-            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Warning,
-                TEXT("Initial Overview Camera composition could not find a Perspective Level Editor viewport; expected location=%s rotation=%s fov=%.6f."),
+            UE_LOG(LogActorMetadataOverlayDemoFixturesEditor, Display,
+                TEXT("Initial Overview Camera composition is waiting for a Perspective Level Editor viewport; expected location=%s rotation=%s fov=%.6f."),
                 *Location.ToString(),
                 *Rotation.ToString(),
                 Fov);
             return;
         }
 
-        ViewportClient->SetViewLocationForOrbiting(Location);
         ViewportClient->SetViewLocation(Location);
         ViewportClient->SetViewRotation(Rotation);
         ViewportClient->ViewFOV = static_cast<float>(Fov);

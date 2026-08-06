@@ -535,6 +535,15 @@ if (-not $regionModuleText.Contains('FLevelEditorViewportClient') -or
     $regionModuleText.Contains('FOVAngle =')) {
     throw 'The Fixture Editor module must apply FOV only to transient Perspective Level Editor viewport state.'
 }
+$orbitApiPatterns = @('SetViewLocationForOrbiting', 'SetLookAtLocation', 'ToggleOrbitCamera', 'OrbitCamera')
+$orbitApiMatches = @($orbitApiPatterns | Where-Object { $regionModuleText.Contains($_) })
+if ($orbitApiMatches.Count -ne 0) {
+    throw "The Fixture Editor module must not mutate the orbit pivot or use look-at/orbit APIs: $($orbitApiMatches -join ', ')."
+}
+if (-not $regionModuleText.Contains('SetViewLocation(Location)') -or
+    -not $regionModuleText.Contains('SetViewRotation(Rotation)')) {
+    throw 'The Fixture Editor module must apply the initial camera location and rotation directly.'
+}
 if (-not $regionModuleText.Contains('ViewportClient->Invalidate') -or
     -not $regionModuleText.Contains('Viewport->InvalidateDisplay()') -or
     -not $regionModuleText.Contains('RedrawLevelEditingViewports')) {
@@ -659,6 +668,11 @@ $result = [pscustomobject]@{
         Fov = $spec.overviewCamera.fov
         SpatiallyLoaded = $false
         InitialViewportReadsFov = $true
+        InitialViewportOrbitMutation = $false
+        SetViewLocationPresent = $true
+        SetViewRotationPresent = $true
+        TransientViewFovPresent = $true
+        InitialViewportFullStateVerification = $true
         InitialViewportFiniteAndRangeValidation = $true
         TransientPerspectiveViewFov = $true
         InvalidateAndRedraw = $true
