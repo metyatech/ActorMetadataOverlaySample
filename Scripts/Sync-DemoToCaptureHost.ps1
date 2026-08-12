@@ -35,7 +35,7 @@ $allowedFiles = @(
 )
 $allowedRoots = @('Plugins/ActorMetadataOverlayDemoFixtures/')
 $prohibitedFragments = @(
-    'Plugins/EditorActorTagDisplay/',
+    'Plugins/ActorMetadataOverlay/',
     'DeepWaterStation/',
     'Content/DeepWaterStation/',
     'Maps/DemoMapScalabilityCinematic.umap',

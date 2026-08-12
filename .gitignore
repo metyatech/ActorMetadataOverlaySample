@@ -11,7 +11,7 @@
 **/Intermediate/
 **/Saved/
 **/DerivedDataCache/
-/Plugins/EditorActorTagDisplay/
+/Plugins/ActorMetadataOverlay/
 /.verification/
 /artifacts/
 *.sln

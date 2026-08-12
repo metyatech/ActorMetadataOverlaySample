@@ -17,5 +17,5 @@ jobs:
           $spec = Get-Content -Raw Demo/demo-spec.json | ConvertFrom-Json
           if ($spec.schemaVersion -ne 1 -or $spec.actors.Count -ne 7 -or $spec.rules.Count -ne 2) { throw 'Unexpected demo specification shape.' }
           if (Test-Path Content/Python/init_unreal.py) { throw 'Startup Python is prohibited.' }
-          if (Test-Path Plugins/EditorActorTagDisplay) { throw 'Paid plugin must not be committed.' }
+          if (Test-Path Plugins/ActorMetadataOverlay) { throw 'Paid plugin must not be committed.' }
           if (Test-Path Content/DeepWaterStation) { throw 'Private content must not be committed.' }

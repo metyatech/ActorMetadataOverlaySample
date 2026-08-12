@@ -15,10 +15,10 @@ $sampleRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $sampleRootFull = [System.IO.Path]::GetFullPath($sampleRoot).TrimEnd('\')
 $sourceRoot = (Resolve-Path -LiteralPath $PluginSource).Path
 $sourceRootFull = [System.IO.Path]::GetFullPath($sourceRoot).TrimEnd('\')
-$sourceDescriptor = Join-Path $sourceRootFull 'EditorActorTagDisplay.uplugin'
-$targetRoot = Join-Path $sampleRootFull 'Plugins\EditorActorTagDisplay'
+$sourceDescriptor = Join-Path $sourceRootFull 'ActorMetadataOverlay.uplugin'
+$targetRoot = Join-Path $sampleRootFull 'Plugins\ActorMetadataOverlay'
 $targetRootFull = [System.IO.Path]::GetFullPath($targetRoot).TrimEnd('\')
-$expectedTargetRoot = [System.IO.Path]::GetFullPath((Join-Path $sampleRootFull 'Plugins\EditorActorTagDisplay')).TrimEnd('\')
+$expectedTargetRoot = [System.IO.Path]::GetFullPath((Join-Path $sampleRootFull 'Plugins\ActorMetadataOverlay')).TrimEnd('\')
 $engineRoot = "C:\Program Files\Epic Games\UE_$EngineVersion"
 $expectedDescriptorEngineVersion = "$EngineVersion.0"
 $reviewRoot = Join-Path $sampleRootFull '.verification\user-review'
@@ -43,8 +43,8 @@ $allowedGeneratedPaths = @(
     (Join-Path $sampleRootFull 'Intermediate'),
     (Join-Path $sampleRootFull 'Plugins\ActorMetadataOverlayDemoFixtures\Binaries'),
     (Join-Path $sampleRootFull 'Plugins\ActorMetadataOverlayDemoFixtures\Intermediate'),
-    (Join-Path $sampleRootFull 'Plugins\EditorActorTagDisplay\Binaries'),
-    (Join-Path $sampleRootFull 'Plugins\EditorActorTagDisplay\Intermediate')
+    (Join-Path $sampleRootFull 'Plugins\ActorMetadataOverlay\Binaries'),
+    (Join-Path $sampleRootFull 'Plugins\ActorMetadataOverlay\Intermediate')
 ) | ForEach-Object { [System.IO.Path]::GetFullPath($_).TrimEnd('\') }
 
 $sourceSnapshotBefore = $null
@@ -280,16 +280,16 @@ function Restore-TargetBackup([string]$Backup, [string]$Target) {
 function Assert-PaidPluginBoundary {
     $gitRoot = Join-Path $sampleRootFull '.git'
     if (Test-Path -LiteralPath $gitRoot) {
-        $null = git -C $sampleRootFull check-ignore --no-index --quiet -- 'Plugins/EditorActorTagDisplay/EditorActorTagDisplay.uplugin'
+        $null = git -C $sampleRootFull check-ignore --no-index --quiet -- 'Plugins/ActorMetadataOverlay/ActorMetadataOverlay.uplugin'
         if ($LASTEXITCODE -ne 0) {
             throw 'The paid plugin copy is not ignored by the sample repository.'
         }
-        $tracked = @(git -C $sampleRootFull ls-files -- 'Plugins/EditorActorTagDisplay')
+        $tracked = @(git -C $sampleRootFull ls-files -- 'Plugins/ActorMetadataOverlay')
         if ($LASTEXITCODE -ne 0) {
             throw 'Unable to inspect tracked paid-plugin files.'
         }
         if ($tracked.Count -gt 0) {
-            throw 'The paid plugin copy must remain untracked: Plugins/EditorActorTagDisplay'
+            throw 'The paid plugin copy must remain untracked: Plugins/ActorMetadataOverlay'
         }
         return $false
     }
@@ -299,8 +299,8 @@ function Assert-PaidPluginBoundary {
         throw 'Sample is not a Git checkout and has no .gitignore boundary file.'
     }
     $gitIgnoreLines = @(Get-Content -LiteralPath $gitIgnorePath)
-    if (-not ($gitIgnoreLines -contains '/Plugins/EditorActorTagDisplay/')) {
-        throw 'Sample .gitignore is missing the exact paid-plugin rule: /Plugins/EditorActorTagDisplay/'
+    if (-not ($gitIgnoreLines -contains '/Plugins/ActorMetadataOverlay/')) {
+        throw 'Sample .gitignore is missing the exact paid-plugin rule: /Plugins/ActorMetadataOverlay/'
     }
     return $false
 }
@@ -443,9 +443,9 @@ function Assert-StagedDescriptorMatchesSource([string]$SourceDescriptorPath, [st
 function Write-ResultManifest([string]$Status, [string]$ErrorMessage) {
     New-Item -ItemType Directory -Path $reviewRoot -Force | Out-Null
     $actualDescriptorEngineVersion = $null
-    if (Test-Path -LiteralPath (Join-Path $targetRootFull 'EditorActorTagDisplay.uplugin')) {
+    if (Test-Path -LiteralPath (Join-Path $targetRootFull 'ActorMetadataOverlay.uplugin')) {
         try {
-            $actualDescriptorEngineVersion = (Get-Descriptor (Join-Path $targetRootFull 'EditorActorTagDisplay.uplugin')).EngineVersion
+            $actualDescriptorEngineVersion = (Get-Descriptor (Join-Path $targetRootFull 'ActorMetadataOverlay.uplugin')).EngineVersion
         }
         catch {
             $actualDescriptorEngineVersion = $null
@@ -465,7 +465,7 @@ function Write-ResultManifest([string]$Status, [string]$ErrorMessage) {
         sourceStatusBefore = if ($null -ne $sourceSnapshotBefore) { $sourceSnapshotBefore.status } else { $null }
         sourceStatusAfter = if ($null -ne $sourceSnapshotAfter) { $sourceSnapshotAfter.status } else { $null }
         targetPath = $targetRootFull
-        targetDescriptorPath = Join-Path $targetRootFull 'EditorActorTagDisplay.uplugin'
+        targetDescriptorPath = Join-Path $targetRootFull 'ActorMetadataOverlay.uplugin'
         markerPath = $markerPath
         markerValid = (Test-Path -LiteralPath $markerPath)
         stagingPath = $stagingPath
@@ -522,11 +522,11 @@ try {
 
     $stagingId = [System.Guid]::NewGuid().ToString('N')
     $stagingPath = Join-Path (Join-Path $setupRoot 'staging') $stagingId
-    $stagingTarget = Join-Path $stagingPath 'EditorActorTagDisplay'
+    $stagingTarget = Join-Path $stagingPath 'ActorMetadataOverlay'
     New-Item -ItemType Directory -Path $stagingPath -Force | Out-Null
     Copy-SourceTree $sourceRootFull $stagingTarget
 
-    $stagedDescriptorPath = Join-Path $stagingTarget 'EditorActorTagDisplay.uplugin'
+    $stagedDescriptorPath = Join-Path $stagingTarget 'ActorMetadataOverlay.uplugin'
     $stagedDescriptorObject = Get-Descriptor $stagedDescriptorPath
     if ($stagedDescriptorObject.PSObject.Properties['EngineVersion']) {
         $stagedDescriptorObject.EngineVersion = $expectedDescriptorEngineVersion
@@ -547,7 +547,7 @@ try {
             throw 'The existing paid plugin target contains a .git directory and cannot be replaced.'
         }
         $backupTimestamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssfffZ')
-        $backupRoot = Join-Path (Join-Path $setupRoot 'backups') (Join-Path $backupTimestamp 'EditorActorTagDisplay')
+        $backupRoot = Join-Path (Join-Path $setupRoot 'backups') (Join-Path $backupTimestamp 'ActorMetadataOverlay')
         $backupInfo = New-TargetBackup $targetRootFull $backupRoot
         $backupManifestPath = $backupInfo.manifestPath
         if (-not (Test-Path -LiteralPath $backupManifestPath)) {
@@ -563,7 +563,7 @@ try {
     Move-Item -LiteralPath $stagingTarget -Destination $targetRootFull
     $replacedTarget = $true
     Assert-SafeTargetPath
-    Assert-Descriptor (Join-Path $targetRootFull 'EditorActorTagDisplay.uplugin') $expectedDescriptorEngineVersion 'Target' | Out-Null
+    Assert-Descriptor (Join-Path $targetRootFull 'ActorMetadataOverlay.uplugin') $expectedDescriptorEngineVersion 'Target' | Out-Null
     $excludedPathChecks += Assert-NoExcludedDirectories $targetRootFull 'target before build'
 
     $marker = [ordered]@{

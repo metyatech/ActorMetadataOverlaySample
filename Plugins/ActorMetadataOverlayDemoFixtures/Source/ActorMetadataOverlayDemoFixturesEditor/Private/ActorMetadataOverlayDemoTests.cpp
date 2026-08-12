@@ -449,7 +449,7 @@ bool FActorMetadataSampleSyncSafetyTest::RunTest(const FString& Parameters)
 {
     const FString Script = ActorMetadataOverlayDemoTests::ReadProjectFile(TEXT("Scripts/Sync-DemoToCaptureHost.ps1"));
     TestTrue(TEXT("sync defaults to dry run"), Script.Contains(TEXT("DryRun")) && Script.Contains(TEXT("Apply")));
-    TestTrue(TEXT("paid plugin is protected"), Script.Contains(TEXT("Plugins/EditorActorTagDisplay")));
+    TestTrue(TEXT("paid plugin is protected"), Script.Contains(TEXT("Plugins/ActorMetadataOverlay")));
     TestTrue(TEXT("Deep Water paths are protected"), Script.Contains(TEXT("DeepWaterStation")));
     TestTrue(TEXT("allow-delete is explicit"), Script.Contains(TEXT("AllowDelete")));
     TestTrue(TEXT("sync is sample to capture only"), !Script.Contains(TEXT("CopyFromCapture")));

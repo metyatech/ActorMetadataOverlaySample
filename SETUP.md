@@ -2,12 +2,12 @@
 
 ## Local development
 
-1. Clone `ActorMetadataOverlaySample` and `EditorActorTagDisplayPlugin` next to each other.
+1. Clone `ActorMetadataOverlaySample` and `ActorMetadataOverlayPlugin` next to each other.
 2. Run `Scripts/Setup-Local.ps1` with the plugin repository path and selected engine version:
 
    ```powershell
    .\Scripts\Setup-Local.ps1 `
-     -PluginSource '..\EditorActorTagDisplayPlugin' `
+     -PluginSource '..\ActorMetadataOverlayPlugin' `
      -EngineVersion 5.6 `
      -Build
    ```
@@ -19,14 +19,14 @@
 
 The public repository keeps its `ActorMetadataOverlaySample` name, while the internal Unreal project is `ActorMetadataSample` so it stays within Unreal's 20-character project-name limit. The project explicitly disables the engine `AndroidFileServer` plugin; do not add its generated settings or `SecurityToken` to `Config/DefaultEngine.ini`. On the exact overview map, the Fixture Editor module loads `AMO_DemoRegion` once and exposes all seven fixtures through the normal editor actor iterator.
 
-The setup script creates a fresh ignored copy in `Plugins/EditorActorTagDisplay/`, adjusts only the copied descriptor and generated build output, and never edits the source plugin descriptor or repository. The fixture plugin remains free sample source and has only Engine-standard module dependencies.
+The setup script creates a fresh ignored copy in `Plugins/ActorMetadataOverlay/`, adjusts only the copied descriptor and generated build output, and never edits the source plugin descriptor or repository. The fixture plugin remains free sample source and has only Engine-standard module dependencies.
 
 The source workflow compiles C++ modules, so Visual Studio or another supported Unreal C++ toolchain is required. A precompiled Sample release ZIP is not provided at this time.
 
 ## Fab customer
 
 1. Download the matching `Actor Metadata Overlay` plugin package from Fab.
-2. Copy its `EditorActorTagDisplay` directory into this project's `Plugins/` directory.
+2. Copy its `ActorMetadataOverlay` directory into this project's `Plugins/` directory.
 3. Open `ActorMetadataSample.uproject` with the matching Unreal Engine version.
 4. Open `/Game/ActorMetadataOverlayDemo/Maps/ActorMetadataOverlayOverview`.
 

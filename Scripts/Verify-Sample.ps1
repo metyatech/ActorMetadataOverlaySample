@@ -349,16 +349,16 @@ if ($securityTokenMatches.Count -gt 0) {
 
 $paidPluginTracked = @()
 if (Test-Path -LiteralPath (Join-Path $sampleRoot '.git')) {
-    $paidPluginTracked = @(git -C $sampleRoot ls-files -- 'Plugins/EditorActorTagDisplay')
+    $paidPluginTracked = @(git -C $sampleRoot ls-files -- 'Plugins/ActorMetadataOverlay')
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to inspect tracked paid-plugin files.'
     }
 }
 if ($paidPluginTracked.Count -gt 0) {
-    throw 'The paid plugin must remain ignored and untracked: Plugins/EditorActorTagDisplay'
+    throw 'The paid plugin must remain ignored and untracked: Plugins/ActorMetadataOverlay'
 }
 
-$localPluginRoot = Join-Path $sampleRoot 'Plugins/EditorActorTagDisplay'
+$localPluginRoot = Join-Path $sampleRoot 'Plugins/ActorMetadataOverlay'
 $localPluginPresent = Test-Path -LiteralPath $localPluginRoot
 $expectedPluginEngineVersion = if ($EngineVersion) { "$EngineVersion.0" } else { $null }
 $actualPluginEngineVersion = $null
@@ -366,9 +366,9 @@ $localCopyMarkerValid = $false
 $localPluginTracked = ($paidPluginTracked.Count -gt 0)
 $pluginAutomationTestPaths = @()
 if ($EngineVersion -and $localPluginPresent) {
-    $localDescriptorPath = Join-Path $localPluginRoot 'EditorActorTagDisplay.uplugin'
+    $localDescriptorPath = Join-Path $localPluginRoot 'ActorMetadataOverlay.uplugin'
     if (-not (Test-Path -LiteralPath $localDescriptorPath)) {
-        throw 'The local Actor Metadata Overlay copy is missing EditorActorTagDisplay.uplugin. Run Setup-Local.ps1 again with -EngineVersion 5.6 -Build.'
+        throw 'The local Actor Metadata Overlay copy is missing ActorMetadataOverlay.uplugin. Run Setup-Local.ps1 again with -EngineVersion 5.6 -Build.'
     }
     $localDescriptor = Get-Content -LiteralPath $localDescriptorPath -Raw | ConvertFrom-Json
     $actualPluginEngineVersion = $localDescriptor.EngineVersion
@@ -394,14 +394,14 @@ if ($EngineVersion -and $localPluginPresent) {
         throw 'The local copy marker has an empty sourceDescriptorSha256. Run Setup-Local.ps1 again with -EngineVersion 5.6 -Build.'
     }
 
-    $pluginTestSourcePath = Join-Path $localPluginRoot 'Source/EditorActorTagDisplay/Private/Tests/EditorActorTagDisplayTests.cpp'
+    $pluginTestSourcePath = Join-Path $localPluginRoot 'Source/ActorMetadataOverlay/Private/Tests/ActorMetadataOverlayTests.cpp'
     if (-not (Test-Path -LiteralPath $pluginTestSourcePath)) {
         throw 'The local Actor Metadata Overlay copy is missing its Automation test source.'
     }
     $pluginTestSource = Get-Content -LiteralPath $pluginTestSourcePath -Raw
     $pluginAutomationTests = [regex]::Matches($pluginTestSource, '(?s)IMPLEMENT_(?:SIMPLE|CUSTOM_COMPLEX|COMPLEX)_AUTOMATION_TEST\s*\([^,]+,\s*"([^"]+)"')
     $pluginAutomationTestPaths = @($pluginAutomationTests | ForEach-Object { $_.Groups[1].Value })
-    if ($pluginAutomationTestPaths.Count -ne 6 -or 'EditorActorTagDisplay.DataLayerFormatting' -notin $pluginAutomationTestPaths) {
+    if ($pluginAutomationTestPaths.Count -ne 6 -or 'ActorMetadataOverlay.DataLayerFormatting' -notin $pluginAutomationTestPaths) {
         throw "Expected exactly six Plugin Automation tests including DataLayerFormatting; found $($pluginAutomationTestPaths.Count): $($pluginAutomationTestPaths -join ', ')."
     }
 

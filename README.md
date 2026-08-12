@@ -1,6 +1,6 @@
 # Actor Metadata Overlay Sample
 
-This repository contains the public sample project and demo fixtures for [Actor Metadata Overlay](https://github.com/metyatech/EditorActorTagDisplayPlugin).
+This repository contains the public sample project and demo fixtures for [Actor Metadata Overlay](https://github.com/metyatech/ActorMetadataOverlayPlugin).
 The overview map is a finished technical showcase: it introduces the product in one view, then gives each supported metadata source a dedicated fixture station and a distance-filter lane.
 The paid Actor Metadata Overlay plugin is not included.
 
@@ -16,7 +16,7 @@ The paid plugin, Fab packages, Deep Water Station assets, third-party assets, an
 
 - Unreal Engine 5.6, 5.7, or 5.8 installed on Windows.
 - A C++ toolchain when using the repository source directly. The free fixture plugin is compiled from source.
-- A purchased copy of Actor Metadata Overlay when opening the sample as a customer. The matching plugin folder must be copied into `Plugins/EditorActorTagDisplay/` before opening the project.
+- A purchased copy of Actor Metadata Overlay when opening the sample as a customer. The matching plugin folder must be copied into `Plugins/ActorMetadataOverlay/` before opening the project.
 
 ## Quick setup
 
@@ -24,7 +24,7 @@ For local development, clone this repository beside the plugin repository and ru
 
 ```powershell
 .\Scripts\Setup-Local.ps1 `
-  -PluginSource '..\EditorActorTagDisplayPlugin' `
+  -PluginSource '..\ActorMetadataOverlayPlugin' `
   -EngineVersion 5.6 `
   -Build
 ```
@@ -77,7 +77,7 @@ The point rule uses the product's global distance limit. The zone rule enables b
 
 ## Troubleshooting
 
-- If the project reports a missing plugin, copy the matching paid `EditorActorTagDisplay` folder into `Plugins/EditorActorTagDisplay/` before opening it.
+- If the project reports a missing plugin, copy the matching paid `ActorMetadataOverlay` folder into `Plugins/ActorMetadataOverlay/` before opening it.
 - If C++ modules are missing, install the C++ workload and rebuild the editor target with the selected engine version.
 - If the map needs to be regenerated, run `Scripts/Build-DemoMap.py` explicitly from an unattended Unreal Editor command line. It is not a startup script.
 
@@ -101,6 +101,6 @@ The sample project and `ActorMetadataOverlayDemoFixtures` plugin are MIT license
 
 ## Related links
 
-- Plugin repository: https://github.com/metyatech/EditorActorTagDisplayPlugin
+- Plugin repository: https://github.com/metyatech/ActorMetadataOverlayPlugin
 - Public sample repository: https://github.com/metyatech/ActorMetadataOverlaySample
 - Future Fab listing URL: to be added after the listing is published.
